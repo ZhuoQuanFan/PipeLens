@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.analysis.coupling import build_execution_exploration_links
+from app.analysis.python_structure import PythonStructureAnalyzer
 from app.models.session import (
     AgentActionDecision,
     AgentActionRequest,
@@ -10,6 +11,7 @@ from app.models.session import (
     CandidatePatchRequest,
     PatchDecision,
 )
+from app.models.structure import AnalyzePythonRequest, PythonStructureResponse
 from app.models.trace import CouplingRequest, ScopeContract, ScopeRequest, TraceBundle
 from app.models.verification import PatchScopeRequest, PatchScopeResult, VerificationReport
 from app.services.demo import build_demo_trace
@@ -17,7 +19,8 @@ from app.services.scope import build_scope_contract
 from app.services.session import agent_session_store
 from app.services.verification import build_demo_verification, validate_patch_scope
 
-app = FastAPI(title="PipeLens API", version="0.6.0")
+app = FastAPI(title="PipeLens API", version="0.7.0")
+python_structure_analyzer = PythonStructureAnalyzer()
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,6 +34,15 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/analyze-python-structure", response_model=PythonStructureResponse)
+def analyze_python_structure(request: AnalyzePythonRequest) -> PythonStructureResponse:
+    """Extract module/class/function/statement hierarchy for pipe visualization."""
+    try:
+        return python_structure_analyzer.analyze_source(request.source, request.file)
+    except SyntaxError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid Python source: {exc.msg}") from exc
 
 
 @app.get("/api/demo-trace", response_model=TraceBundle)
