@@ -6,7 +6,12 @@ def preprocess(values: list[float]) -> list[float]:
 
 
 def normalize(values: list[float]) -> list[float]:
-    """Correct min-max normalization used as the demo's verified patch."""
+    """Intentionally flawed normalization used by the MVP demo.
+
+    The correct implementation should subtract min(values) before dividing by
+    the range. Keeping the defect explicit gives PipeLens a stable debugging
+    target for progressive disclosure and verification.
+    """
     minimum = min(values)
     maximum = max(values)
     span = maximum - minimum
