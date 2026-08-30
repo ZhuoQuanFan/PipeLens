@@ -3,10 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.analysis.coupling import build_execution_exploration_links
 from app.models.trace import CouplingRequest, ScopeContract, ScopeRequest, TraceBundle
+from app.models.verification import VerificationReport
 from app.services.demo import build_demo_trace
 from app.services.scope import build_scope_contract
+from app.services.verification import build_demo_verification
 
-app = FastAPI(title="PipeLens API", version="0.3.0")
+app = FastAPI(title="PipeLens API", version="0.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,5 +46,14 @@ def generate_scope(request: ScopeRequest) -> ScopeContract:
     """Translate a visual program selection into search/context/edit bounds."""
     try:
         return build_scope_contract(request.program_nodes, request.selected_node_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/demo-verification", response_model=VerificationReport)
+def demo_verification(selected_node_id: str) -> VerificationReport:
+    """Run before/after pytest, runtime diff, and scope-compliance checks."""
+    try:
+        return build_demo_verification(selected_node_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
