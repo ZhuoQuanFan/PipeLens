@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime data
+*.jsonl
+trace-output/
+
+# Environment
+.env
+.env.*
+!.env.example
