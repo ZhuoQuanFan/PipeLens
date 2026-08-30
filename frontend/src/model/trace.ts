@@ -23,10 +23,20 @@ export type ProgramNode = {
   runtime: RuntimeEvidence;
 };
 
+export type AgentEventType =
+  | "search"
+  | "open_file"
+  | "symbol_lookup"
+  | "inspect_function"
+  | "run_test"
+  | "backtrack"
+  | "patch"
+  | "execute";
+
 export type AgentEvent = {
   id: string;
   timestamp: number;
-  type: string;
+  type: AgentEventType;
   target?: {
     file?: string | null;
     symbol?: string | null;
@@ -37,9 +47,16 @@ export type AgentEvent = {
   observable_output?: unknown;
 };
 
+export type ExecutionExplorationLink = {
+  execution_node_id: string;
+  agent_event_id: string;
+  relation: "exact" | "ancestor" | "dependency" | "candidate";
+  confidence?: number | null;
+};
+
 export type TraceBundle = {
   session_id: string;
   program_nodes: ProgramNode[];
   agent_events: AgentEvent[];
-  links: unknown[];
+  links: ExecutionExplorationLink[];
 };
