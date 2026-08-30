@@ -34,6 +34,9 @@ class ProgramNode(BaseModel):
     children: list[str] = Field(default_factory=list)
     incoming: list[str] = Field(default_factory=list)
     outgoing: list[str] = Field(default_factory=list)
+    dataflow_inputs: list[str] = Field(default_factory=list)
+    dataflow_outputs: list[str] = Field(default_factory=list)
+    expression: str | None = None
     runtime: RuntimeEvidence = Field(default_factory=RuntimeEvidence)
 
 
