@@ -57,6 +57,23 @@ export type ExecutionExplorationLink = {
   confidence?: number | null;
 };
 
+export type LineRange = {
+  file: string;
+  start: number;
+  end: number;
+};
+
+export type ScopeContract = {
+  selected_node_id: string;
+  search_node_ids: string[];
+  search_files: string[];
+  context_node_ids: string[];
+  include_runtime_values: boolean;
+  include_tests: boolean;
+  edit_files: string[];
+  edit_line_ranges: LineRange[];
+};
+
 export type TraceBundle = {
   session_id: string;
   program_nodes: ProgramNode[];
