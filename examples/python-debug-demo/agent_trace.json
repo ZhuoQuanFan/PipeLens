@@ -1,0 +1,82 @@
+[
+  {
+    "id": "evt-001",
+    "timestamp": 1.0,
+    "type": "search",
+    "tool": "ripgrep",
+    "observable_input": "pipeline score normalization",
+    "observable_output": ["test_app.py", "app.py"]
+  },
+  {
+    "id": "evt-002",
+    "timestamp": 2.0,
+    "type": "open_file",
+    "target": {"file": "test_app.py"},
+    "tool": "open_file"
+  },
+  {
+    "id": "evt-003",
+    "timestamp": 3.0,
+    "type": "symbol_lookup",
+    "target": {"file": "test_app.py", "symbol": "test_pipeline_score_uses_normalized_values"},
+    "tool": "symbol_lookup"
+  },
+  {
+    "id": "evt-004",
+    "timestamp": 4.0,
+    "type": "run_test",
+    "target": {"file": "test_app.py", "symbol": "test_pipeline_score_uses_normalized_values"},
+    "tool": "pytest",
+    "observable_output": "failed"
+  },
+  {
+    "id": "evt-005",
+    "timestamp": 5.0,
+    "type": "backtrack",
+    "target": {"file": "test_app.py"},
+    "tool": "agent"
+  },
+  {
+    "id": "evt-006",
+    "timestamp": 6.0,
+    "type": "open_file",
+    "target": {"file": "app.py"},
+    "tool": "open_file"
+  },
+  {
+    "id": "evt-007",
+    "timestamp": 7.0,
+    "type": "inspect_function",
+    "target": {"file": "app.py", "symbol": "score"},
+    "tool": "symbol_lookup"
+  },
+  {
+    "id": "evt-008",
+    "timestamp": 8.0,
+    "type": "symbol_lookup",
+    "target": {"file": "app.py", "symbol": "normalize"},
+    "tool": "symbol_lookup"
+  },
+  {
+    "id": "evt-009",
+    "timestamp": 9.0,
+    "type": "inspect_function",
+    "target": {"file": "app.py", "symbol": "normalize"},
+    "tool": "open_symbol"
+  },
+  {
+    "id": "evt-010",
+    "timestamp": 10.0,
+    "type": "patch",
+    "target": {"file": "app.py", "symbol": "normalize"},
+    "tool": "apply_patch",
+    "observable_input": "Constrain patch to normalize()"
+  },
+  {
+    "id": "evt-011",
+    "timestamp": 11.0,
+    "type": "execute",
+    "target": {"file": "app.py", "symbol": "run_pipeline"},
+    "tool": "python"
+  }
+]
