@@ -67,3 +67,24 @@ def test_scope_endpoint_rejects_unknown_node():
     )
 
     assert response.status_code == 404
+
+
+def test_demo_verification_endpoint_returns_real_before_after_evidence():
+    trace = client.get("/api/demo-trace").json()
+    normalize = next(
+        node for node in trace["program_nodes"]
+        if node["level"] == "function" and node["label"] == "normalize()"
+    )
+
+    response = client.get(
+        "/api/demo-verification",
+        params={"selected_node_id": normalize["id"]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["before_tests"]["failed"] == 2
+    assert payload["after_tests"]["passed"] == 2
+    assert payload["improved"] is True
+    assert payload["scope_compliant"] is True
+    assert payload["changed_line_ranges"] == [{"file": "app.py", "start": 21, "end": 21}]
