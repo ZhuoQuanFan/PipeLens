@@ -9,7 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from app.models.trace import LineRange, ProgramNode, ScopeContract
+from app.models.trace import LineRange, ScopeContract
 from app.models.verification import ExecutionDiff, ScopeViolation, TestSummary, VerificationReport
 from app.services.demo import build_demo_trace
 from app.services.scope import build_scope_contract
@@ -34,8 +34,9 @@ def build_demo_verification(selected_node_id: str) -> VerificationReport:
     before_tests = _run_pytest(before_source, test_source)
     after_tests = _run_pytest(after_source, test_source)
 
+    changed_files = ["app.py"] if before_source != after_source else []
     changed_ranges = _changed_line_ranges(before_source, after_source, "app.py")
-    violations = _scope_violations(changed_ranges, scope)
+    violations = validate_patch_scope(changed_files, changed_ranges, scope)
     execution_diffs = _execution_diffs(before_path, after_path, demo_root)
     unified_diff = "".join(
         difflib.unified_diff(
@@ -50,12 +51,64 @@ def build_demo_verification(selected_node_id: str) -> VerificationReport:
         selected_node_id=selected_node_id,
         before_tests=before_tests,
         after_tests=after_tests,
-        changed_files=["app.py"] if before_source != after_source else [],
+        changed_files=changed_files,
         changed_line_ranges=changed_ranges,
         scope_violations=violations,
         execution_diffs=execution_diffs,
         unified_diff=unified_diff,
     )
+
+
+def validate_patch_scope(
+    changed_files: list[str],
+    changes: list[LineRange],
+    scope: ScopeContract,
+) -> list[ScopeViolation]:
+    """Validate a candidate patch before application against a visual scope."""
+    violations: list[ScopeViolation] = []
+    allowed_files = set(scope.edit_files)
+    reported_files: set[str] = set()
+
+    for file_name in changed_files:
+        if file_name in allowed_files:
+            continue
+        reported_files.add(file_name)
+        violations.append(
+            ScopeViolation(
+                file=file_name,
+                start=1,
+                end=1,
+                reason="changed file is outside the visual edit scope",
+            )
+        )
+
+    for change in changes:
+        if change.file not in allowed_files:
+            if change.file not in reported_files:
+                violations.append(
+                    ScopeViolation(
+                        file=change.file,
+                        start=change.start,
+                        end=change.end,
+                        reason="changed file is outside the visual edit scope",
+                    )
+                )
+            continue
+
+        file_ranges = [item for item in scope.edit_line_ranges if item.file == change.file]
+        if not file_ranges:
+            continue
+        if not any(change.start >= allowed.start and change.end <= allowed.end for allowed in file_ranges):
+            violations.append(
+                ScopeViolation(
+                    file=change.file,
+                    start=change.start,
+                    end=change.end,
+                    reason="changed lines exceed the visual edit boundary",
+                )
+            )
+
+    return violations
 
 
 def _run_pytest(app_source: str, test_source: str) -> TestSummary:
@@ -122,38 +175,6 @@ def _merge_line_ranges(ranges: list[LineRange]) -> list[LineRange]:
         else:
             merged.append(current)
     return merged
-
-
-def _scope_violations(changes: list[LineRange], scope: ScopeContract) -> list[ScopeViolation]:
-    violations: list[ScopeViolation] = []
-    allowed_files = set(scope.edit_files)
-
-    for change in changes:
-        if change.file not in allowed_files:
-            violations.append(
-                ScopeViolation(
-                    file=change.file,
-                    start=change.start,
-                    end=change.end,
-                    reason="changed file is outside the visual edit scope",
-                )
-            )
-            continue
-
-        file_ranges = [item for item in scope.edit_line_ranges if item.file == change.file]
-        if not file_ranges:
-            continue
-        if not any(change.start >= allowed.start and change.end <= allowed.end for allowed in file_ranges):
-            violations.append(
-                ScopeViolation(
-                    file=change.file,
-                    start=change.start,
-                    end=change.end,
-                    reason="changed lines exceed the visual edit boundary",
-                )
-            )
-
-    return violations
 
 
 def _execution_diffs(before_path: Path, after_path: Path, repository_root: Path) -> list[ExecutionDiff]:
