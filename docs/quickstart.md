@@ -43,13 +43,38 @@ This is a syntactic, intraprocedural approximation. It is not yet a path-sensiti
 
 ### Generic agent coupling API
 
-External coding-agent integrations can send observable events to the generic coupling endpoint:
+External coding-agent integrations can send observable events to:
 
 ```text
 POST http://localhost:8000/api/couple
 ```
 
 See `docs/agent-trace-format.md` for the event schema and mapping rules.
+
+### Visualization-as-Control API
+
+A visual selection can be converted into a machine-readable agent boundary with:
+
+```text
+POST http://localhost:8000/api/scope
+```
+
+Request:
+
+```json
+{
+  "selected_node_id": "dataflow:app.py:normalize:20:4",
+  "program_nodes": []
+}
+```
+
+The real request sends the current `program_nodes` array. The response is a `ScopeContract` containing:
+
+- `search_node_ids` and `search_files`;
+- `context_node_ids` plus runtime/test inclusion flags;
+- `edit_files` and exact `edit_line_ranges`.
+
+The active disclosure level controls granularity. Selecting a Function creates a function-range edit boundary; Dataflow and Statement selections can narrow it to the corresponding computation/source range.
 
 ## Frontend
 
@@ -85,15 +110,15 @@ The current UI supports:
 6. visual distinction among `runtime-linked`, `gap`, and `context` exploration events;
 7. bidirectional coupled brushing between agent exploration and program execution;
 8. an explicit Exploration–Execution Gap callout;
-9. Search / Context / Edit scope previews derived from the selected execution node;
-10. a working scope-lock interaction that turns the current selection into a proposed agent boundary;
+9. backend-generated Search / Context / Edit `ScopeContract`s from the active visual disclosure node;
+10. scope granularity that follows the selected Function / Dataflow / Statement level;
 11. a verification placeholder using explicit test counts rather than an undefined score.
 
 ## Not Implemented Yet
 
 - direct adapters for Codex / Claude Code / other live agents;
 - path-sensitive / interprocedural data-flow analysis;
-- actual scoped AI patch execution;
+- execution of a real coding agent under the generated ScopeContract;
 - automatic before/after pytest measurement;
 - Monaco source inspector;
 - persistent sessions / trace database;
