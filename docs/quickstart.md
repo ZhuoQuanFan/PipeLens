@@ -26,7 +26,7 @@ The demo trace is built from `examples/python-debug-demo/` using:
 - observable coding-agent actions from `agent_trace.json`;
 - automatic execution–exploration correspondence by node/file/symbol evidence.
 
-The example intentionally contains a normalization defect so the prototype has a stable target for localization, scoped editing, and verification.
+The example intentionally contains a normalization defect so the prototype has a stable target for localization, scoped editing, and verification. `app_fixed.py` contains a one-line corrected implementation used only to exercise the verification pipeline.
 
 ### Dataflow semantics
 
@@ -59,22 +59,55 @@ A visual selection can be converted into a machine-readable agent boundary with:
 POST http://localhost:8000/api/scope
 ```
 
-Request:
-
-```json
-{
-  "selected_node_id": "dataflow:app.py:normalize:20:4",
-  "program_nodes": []
-}
-```
-
-The real request sends the current `program_nodes` array. The response is a `ScopeContract` containing:
+The response is a `ScopeContract` containing:
 
 - `search_node_ids` and `search_files`;
 - `context_node_ids` plus runtime/test inclusion flags;
 - `edit_files` and exact `edit_line_ranges`.
 
 The active disclosure level controls granularity. Selecting a Function creates a function-range edit boundary; Dataflow and Statement selections can narrow it to the corresponding computation/source range.
+
+### Patch Guard API
+
+Before applying an agent patch, its changed files and line ranges can be checked against the current visual `ScopeContract`:
+
+```text
+POST http://localhost:8000/api/validate-patch
+```
+
+Example:
+
+```json
+{
+  "scope": {
+    "selected_node_id": "statement:app.py:20",
+    "edit_files": ["app.py"],
+    "edit_line_ranges": [{"file": "app.py", "start": 20, "end": 20}]
+  },
+  "changed_files": ["app.py"],
+  "changed_line_ranges": [{"file": "app.py", "start": 20, "end": 20}]
+}
+```
+
+The response reports `scope_compliant` and explicit violations. This check is intended to run **before patch application**, so a coding-agent adapter can reject edits outside the user-selected visual scope.
+
+### Execution-aware verification
+
+The demo verification endpoint is:
+
+```text
+GET http://localhost:8000/api/demo-verification?selected_node_id=<program-node-id>
+```
+
+It performs real evidence collection:
+
+1. runs the original implementation with pytest;
+2. runs the corrected implementation with pytest;
+3. computes a unified code diff and changed line ranges;
+4. re-executes both programs and compares function outputs;
+5. validates the patch against the selected visual scope.
+
+For the current demo the expected evidence is `0/2 → 2/2 tests passed`, with the source change restricted to the normalization return expression.
 
 ## Frontend
 
@@ -90,7 +123,7 @@ Open:
 http://localhost:5173
 ```
 
-The frontend loads `/api/demo-trace` from `http://localhost:8000` by default.
+The frontend loads the trace and verification evidence from `http://localhost:8000` by default.
 
 To use another backend:
 
@@ -103,7 +136,7 @@ VITE_API_BASE=http://localhost:9000 npm run dev
 The current UI supports:
 
 1. progressive disclosure across Behavior / Logic / Function / Dataflow / Statement;
-2. real AST-derived Dataflow nodes and def-use links instead of a placeholder Dataflow layer;
+2. real AST-derived Dataflow nodes and def-use links;
 3. a program execution lane grounded in runtime trace data;
 4. an AI exploration lane grounded in observable agent events;
 5. automatic event-to-program mapping using file/symbol evidence;
@@ -112,14 +145,17 @@ The current UI supports:
 8. an explicit Exploration–Execution Gap callout;
 9. backend-generated Search / Context / Edit `ScopeContract`s from the active visual disclosure node;
 10. scope granularity that follows the selected Function / Dataflow / Statement level;
-11. a verification placeholder using explicit test counts rather than an undefined score.
+11. real before/after pytest evidence;
+12. runtime function-output comparison;
+13. source diff and changed-line evidence;
+14. edit-scope compliance / violation reporting;
+15. a pre-apply Patch Guard API for coding-agent integration.
 
 ## Not Implemented Yet
 
 - direct adapters for Codex / Claude Code / other live agents;
-- path-sensitive / interprocedural data-flow analysis;
 - execution of a real coding agent under the generated ScopeContract;
-- automatic before/after pytest measurement;
+- path-sensitive / interprocedural data-flow analysis;
 - Monaco source inspector;
 - persistent sessions / trace database;
 - interaction logging for the user study.
