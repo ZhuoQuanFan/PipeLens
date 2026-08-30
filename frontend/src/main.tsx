@@ -31,6 +31,10 @@ function App() {
 
   function selectNode(node: PipeNode) {
     setSelectedId(node.id);
+    if (node.children?.length) {
+      setFocusId(node.id);
+      setSelectedId(node.children[0]?.id ?? node.id);
+    }
   }
 
   function openNode(node: PipeNode) {
