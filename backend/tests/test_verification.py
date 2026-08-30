@@ -19,8 +19,8 @@ def test_demo_verification_uses_real_pytest_and_scope():
     assert report.scope_compliant is True
     assert report.changed_files == ["app.py"]
     assert report.changed_line_ranges
-    assert report.changed_line_ranges[0].start == 21
-    assert report.changed_line_ranges[0].end == 21
+    assert report.changed_line_ranges[0].start == 20
+    assert report.changed_line_ranges[0].end == 20
 
     normalize_diff = next(item for item in report.execution_diffs if item.function == "normalize()")
     score_diff = next(item for item in report.execution_diffs if item.function == "score()")
@@ -30,17 +30,15 @@ def test_demo_verification_uses_real_pytest_and_scope():
     assert "+    return [(v - minimum) / span for v in values]" in report.unified_diff
 
 
-def test_statement_scope_detects_out_of_scope_patch_when_wrong_statement_selected():
+def test_dataflow_scope_detects_out_of_scope_patch_when_wrong_computation_selected():
     trace = build_demo_trace()
-    normalize = next(
+    wrong_flow = next(
         node for node in trace.program_nodes
-        if node.level.value == "function" and node.label == "normalize()"
+        if node.level.value == "dataflow" and node.file == "app.py" and node.start_line == 15
     )
-    statements = [node for node in trace.program_nodes if node.parent_id == normalize.id and node.level.value == "statement"]
-    wrong_statement = next(node for node in statements if node.start_line == 15)
 
-    report = build_demo_verification(wrong_statement.id)
+    report = build_demo_verification(wrong_flow.id)
 
     assert report.scope_compliant is False
     assert report.scope_violations
-    assert report.scope_violations[0].start == 21
+    assert report.scope_violations[0].start == 20
