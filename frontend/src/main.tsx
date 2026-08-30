@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { createAgentSession } from "./api/session";
+import { createAgentSession, fetchAgentSession } from "./api/session";
 import { fetchDemoTrace, generateScopeContract } from "./api/trace";
 import type { AgentSession } from "./model/session";
 import type { AgentEvent, ProgramNode, ScopeContract, TraceBundle } from "./model/trace";
@@ -46,6 +46,32 @@ function App() {
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Unable to load trace"));
   }, []);
+
+  useEffect(() => {
+    if (!agentSession) return;
+    let cancelled = false;
+
+    const refresh = async () => {
+      try {
+        const latest = await fetchAgentSession(agentSession.id);
+        if (cancelled) return;
+        setAgentSession(latest);
+        setTrace((currentTrace) => currentTrace ? {
+          ...currentTrace,
+          agent_events: latest.agent_events,
+          links: latest.links,
+        } : currentTrace);
+      } catch (cause) {
+        if (!cancelled) setScopeError(cause instanceof Error ? cause.message : "Unable to refresh agent session");
+      }
+    };
+
+    const timer = window.setInterval(refresh, 1200);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [agentSession?.id]);
 
   const executionItems = useMemo(() => {
     if (!trace) return ["Input", "preprocess()", "normalize()", "score()", "Output"];
@@ -130,6 +156,7 @@ function App() {
         context: `${current.level} selection → evidence context`,
         edit: `${current.level} visual boundary`,
       };
+  const blockedActions = agentSession?.action_decisions.filter((item) => !item.allowed).slice(-3) ?? [];
 
   return (
     <main className="app-shell">
@@ -185,10 +212,16 @@ function App() {
           {agentSession ? (
             <div className="scope-confirmation">
               <strong>Agent runtime: {agentSession.id}</strong><br />
-              provider {agentSession.provider} · Search Scope authorization on · Patch Guard on · rejected {agentSession.rejected_actions} action(s), {agentSession.rejected_patches} patch(es)
+              provider {agentSession.provider} · live exploration sync on · rejected {agentSession.rejected_actions} action(s), {agentSession.rejected_patches} patch(es)
             </div>
           ) : scopeContract ? (
             <div className="scope-confirmation">Scope contract generated from <code>{scopeContract.selected_node_id}</code>.</div>
+          ) : null}
+          {blockedActions.length ? (
+            <div className="blocked-action-list">
+              <strong>Blocked by visual Search Scope</strong>
+              {blockedActions.map((item) => <div key={item.event.id}><span>× {targetLabel(item.event)}</span><small>{item.reason}</small></div>)}
+            </div>
           ) : null}
           {scopeError ? <div className="scope-confirmation">{scopeError}</div> : null}
         </aside>
