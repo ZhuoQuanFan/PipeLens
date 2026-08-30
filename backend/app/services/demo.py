@@ -3,8 +3,10 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+from app.analysis.coupling import build_execution_exploration_links
 from app.analysis.python_ast import PythonHierarchyAnalyzer
 from app.models.trace import TraceBundle
+from app.tracing.agent import load_agent_events
 from app.tracing.runtime import RuntimeTracer
 
 
@@ -21,6 +23,7 @@ def build_demo_trace() -> TraceBundle:
     repository_root = Path(__file__).resolve().parents[3]
     demo_root = repository_root / "examples" / "python-debug-demo"
     app_path = demo_root / "app.py"
+    agent_trace_path = demo_root / "agent_trace.json"
 
     analyzer = PythonHierarchyAnalyzer()
     static_nodes = analyzer.analyze_file(app_path, demo_root)
@@ -40,7 +43,12 @@ def build_demo_trace() -> TraceBundle:
             continue
         node.runtime = runtime.runtime
 
+    agent_events = load_agent_events(agent_trace_path)
+    links = build_execution_exploration_links(static_nodes, agent_events)
+
     return TraceBundle(
         session_id="python-debug-demo",
         program_nodes=static_nodes,
+        agent_events=agent_events,
+        links=links,
     )
