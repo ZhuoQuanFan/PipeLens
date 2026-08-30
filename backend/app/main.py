@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.models.trace import TraceBundle
+from app.services.demo import build_demo_trace
 
 app = FastAPI(title="PipeLens API", version="0.1.0")
 
@@ -12,4 +13,4 @@ def health() -> dict[str, str]:
 
 @app.get("/api/demo-trace", response_model=TraceBundle)
 def demo_trace() -> TraceBundle:
-    return TraceBundle(session_id="demo-session")
+    return build_demo_trace()
