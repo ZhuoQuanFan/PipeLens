@@ -29,13 +29,18 @@ function App() {
     fetchDemoTrace()
       .then((bundle) => {
         setTrace(bundle);
+        const normalizeNode = bundle.program_nodes.find(
+          (node) => node.level === "function" && node.label === "normalize()" && node.runtime.executed,
+        );
         const firstExecuted = bundle.program_nodes.find(
           (node) => node.level === "function" && node.runtime.executed,
         );
-        if (firstExecuted) setSelectedExecution(firstExecuted.label);
+        if (normalizeNode ?? firstExecuted) {
+          setSelectedExecution((normalizeNode ?? firstExecuted)!.label);
+        }
 
         const firstGap = bundle.agent_events.find(
-          (event) => event.target && !bundle.links.some((link) => link.agent_event_id === event.id),
+          (event) => event.target && explorationStatus(event, bundle) === "gap",
         );
         setSelectedExplorationEventId(firstGap?.id ?? bundle.agent_events[0]?.id ?? null);
       })
@@ -72,6 +77,21 @@ function App() {
     () => trace?.program_nodes.find((node) => node.id === selectedAgentLink?.execution_node_id),
     [trace, selectedAgentLink],
   );
+
+  const coupledExecutionLabels = useMemo(() => {
+    if (!trace || !linkedAgentNode) return new Set<string>();
+    return new Set(executedFunctionDescendants(linkedAgentNode, trace.program_nodes).map((node) => node.label));
+  }, [trace, linkedAgentNode]);
+
+  const relatedAgentEventIds = useMemo(() => {
+    if (!trace || !selectedProgramNode) return new Set<string>();
+    const relatedNodeIds = new Set([selectedProgramNode.id, ...ancestorIds(selectedProgramNode, trace.program_nodes)]);
+    return new Set(
+      trace.links
+        .filter((link) => relatedNodeIds.has(link.execution_node_id))
+        .map((link) => link.agent_event_id),
+    );
+  }, [trace, selectedProgramNode]);
 
   const disclosure = useMemo(
     () => buildDisclosure(selectedProgramNode, trace?.program_nodes ?? []),
@@ -110,6 +130,28 @@ function App() {
   useEffect(() => {
     setScopeLocked(false);
   }, [selectedExecution]);
+
+  function handleExplorationSelect(eventId: string) {
+    setSelectedExplorationEventId(eventId);
+    if (!trace) return;
+
+    const event = trace.agent_events.find((candidate) => candidate.id === eventId);
+    if (!event || explorationStatus(event, trace) !== "aligned") return;
+
+    const link = trace.links.find((candidate) => candidate.agent_event_id === eventId);
+    const linkedNode = trace.program_nodes.find((candidate) => candidate.id === link?.execution_node_id);
+    if (!linkedNode) return;
+
+    if (linkedNode.level === "function" && linkedNode.runtime.executed) {
+      setSelectedExecution(linkedNode.label);
+      return;
+    }
+
+    const descendants = executedFunctionDescendants(linkedNode, trace.program_nodes);
+    if (descendants.length === 1) {
+      setSelectedExecution(descendants[0].label);
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -174,6 +216,7 @@ function App() {
           <ExecutionLane
             items={execution}
             selected={selectedExecution}
+            coupled={coupledExecutionLabels}
             onSelect={setSelectedExecution}
           />
 
@@ -185,7 +228,8 @@ function App() {
             events={trace?.agent_events ?? []}
             trace={trace}
             selectedEventId={selectedExplorationEventId}
-            onSelect={setSelectedExplorationEventId}
+            relatedEventIds={relatedAgentEventIds}
+            onSelect={handleExplorationSelect}
           />
 
           <div className={gap ? "gap-callout" : "aligned-callout"}>
@@ -257,7 +301,9 @@ function buildDisclosure(node: ProgramNode | undefined, allNodes: ProgramNode[])
   const statements = allNodes.filter(
     (candidate) => candidate.parent_id === node.id && candidate.level === "statement",
   );
-  const statement = statements.find((item) => item.label.includes("return")) ?? statements[0];
+  const statement = statements.find((item) => item.label.includes("/ span"))
+    ?? [...statements].reverse().find((item) => item.label.includes("return"))
+    ?? statements[0];
   return [
     { level: "Behavior", title: "Input → Output", subtitle: "Observed program behavior" },
     { level: "Logic", title: `… → ${node.label} → …`, subtitle: "Selected computation in the executed pipeline" },
@@ -282,21 +328,43 @@ function formatRuntime(node: ProgramNode): string {
     .join(" · ") || "Runtime values unavailable";
 }
 
-function hasExecutedEvidence(node: ProgramNode, nodes: ProgramNode[]): boolean {
-  if (node.runtime.executed) return true;
+function ancestorIds(node: ProgramNode, nodes: ProgramNode[]): string[] {
+  const byId = new Map(nodes.map((candidate) => [candidate.id, candidate]));
+  const ids: string[] = [];
+  let parentId = node.parent_id;
+  while (parentId) {
+    ids.push(parentId);
+    parentId = byId.get(parentId)?.parent_id ?? null;
+  }
+  return ids;
+}
+
+function executedFunctionDescendants(node: ProgramNode, nodes: ProgramNode[]): ProgramNode[] {
+  if (node.level === "function") {
+    return node.runtime.executed ? [node] : [];
+  }
+
   const byId = new Map(nodes.map((candidate) => [candidate.id, candidate]));
   const queue = [...node.children];
   const visited = new Set<string>();
+  const result: ProgramNode[] = [];
+
   while (queue.length) {
     const id = queue.shift()!;
     if (visited.has(id)) continue;
     visited.add(id);
     const child = byId.get(id);
     if (!child) continue;
-    if (child.runtime.executed) return true;
+    if (child.level === "function" && child.runtime.executed) result.push(child);
     queue.push(...child.children);
   }
-  return false;
+
+  return result;
+}
+
+function hasExecutedEvidence(node: ProgramNode, nodes: ProgramNode[]): boolean {
+  if (node.runtime.executed) return true;
+  return executedFunctionDescendants(node, nodes).length > 0;
 }
 
 function explorationStatus(event: AgentEvent, trace: TraceBundle): ExplorationStatus {
@@ -323,7 +391,7 @@ function couplingDescription(
       ? `The agent inspected ${target}, but this region has no execution evidence in the selected run.`
       : `The agent inspected ${target}, but PipeLens cannot map that action to the current program execution.`;
   }
-  return `The agent action on ${target} maps to ${linkedNode?.label ?? "an executed region"} with runtime support.`;
+  return `The agent action on ${target} maps to ${linkedNode?.label ?? "an executed region"} with runtime support. The corresponding execution region is highlighted.`;
 }
 
 function eventTargetLabel(event: AgentEvent): string {
@@ -336,10 +404,12 @@ function eventTargetLabel(event: AgentEvent): string {
 function ExecutionLane({
   items,
   selected,
+  coupled,
   onSelect,
 }: {
   items: string[];
   selected: string;
+  coupled: Set<string>;
   onSelect: (value: string) => void;
 }) {
   return (
@@ -349,20 +419,25 @@ function ExecutionLane({
         <span>What actually ran</span>
       </div>
       <div className="lane-flow">
-        {items.map((item, index) => (
-          <React.Fragment key={`${item}-${index}`}>
-            <button
-              className={item === selected ? "pipeline-node selected" : "pipeline-node"}
-              type="button"
-              onClick={() => {
-                if (item !== "Input" && item !== "Output") onSelect(item);
-              }}
-            >
-              {item}
-            </button>
-            {index < items.length - 1 ? <span className="flow-arrow">→</span> : null}
-          </React.Fragment>
-        ))}
+        {items.map((item, index) => {
+          const classes = ["pipeline-node"];
+          if (item === selected) classes.push("selected");
+          if (coupled.has(item)) classes.push("coupled");
+          return (
+            <React.Fragment key={`${item}-${index}`}>
+              <button
+                className={classes.join(" ")}
+                type="button"
+                onClick={() => {
+                  if (item !== "Input" && item !== "Output") onSelect(item);
+                }}
+              >
+                {item}
+              </button>
+              {index < items.length - 1 ? <span className="flow-arrow">→</span> : null}
+            </React.Fragment>
+          );
+        })}
       </div>
     </div>
   );
@@ -372,11 +447,13 @@ function ExplorationLane({
   events,
   trace,
   selectedEventId,
+  relatedEventIds,
   onSelect,
 }: {
   events: AgentEvent[];
   trace: TraceBundle | null;
   selectedEventId: string | null;
+  relatedEventIds: Set<string>;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -389,10 +466,13 @@ function ExplorationLane({
         {events.length === 0 ? <span className="empty-events">No agent events loaded</span> : null}
         {events.map((event, index) => {
           const status = trace ? explorationStatus(event, trace) : "context";
+          const classes = ["agent-event-node", status];
+          if (event.id === selectedEventId) classes.push("selected");
+          if (relatedEventIds.has(event.id)) classes.push("coupled");
           return (
             <React.Fragment key={event.id}>
               <button
-                className={`agent-event-node ${status} ${event.id === selectedEventId ? "selected" : ""}`}
+                className={classes.join(" ")}
                 type="button"
                 onClick={() => onSelect(event.id)}
                 aria-label={`${event.type}: ${eventTargetLabel(event)}`}
