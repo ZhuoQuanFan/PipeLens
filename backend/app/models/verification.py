@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from app.models.trace import LineRange
 
@@ -40,10 +40,12 @@ class VerificationReport(BaseModel):
     execution_diffs: list[ExecutionDiff] = Field(default_factory=list)
     unified_diff: str = ""
 
+    @computed_field
     @property
     def scope_compliant(self) -> bool:
         return not self.scope_violations
 
+    @computed_field
     @property
     def improved(self) -> bool:
         return self.after_tests.passed > self.before_tests.passed and self.after_tests.failed < self.before_tests.failed
