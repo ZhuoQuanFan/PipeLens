@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
 
-from app.models.trace import LineRange
+from app.models.trace import LineRange, ScopeContract
 
 
 class TestSummary(BaseModel):
@@ -28,6 +28,21 @@ class ScopeViolation(BaseModel):
     start: int
     end: int
     reason: str
+
+
+class PatchScopeRequest(BaseModel):
+    scope: ScopeContract
+    changed_files: list[str] = Field(default_factory=list)
+    changed_line_ranges: list[LineRange] = Field(default_factory=list)
+
+
+class PatchScopeResult(BaseModel):
+    scope_violations: list[ScopeViolation] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def scope_compliant(self) -> bool:
+        return not self.scope_violations
 
 
 class VerificationReport(BaseModel):
