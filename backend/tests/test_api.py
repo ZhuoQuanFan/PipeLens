@@ -69,6 +69,49 @@ def test_scope_endpoint_rejects_unknown_node():
     assert response.status_code == 404
 
 
+def test_patch_guard_accepts_patch_inside_visual_scope():
+    response = client.post(
+        "/api/validate-patch",
+        json={
+            "scope": {
+                "selected_node_id": "statement:app.py:20",
+                "edit_files": ["app.py"],
+                "edit_line_ranges": [{"file": "app.py", "start": 20, "end": 20}],
+            },
+            "changed_files": ["app.py"],
+            "changed_line_ranges": [{"file": "app.py", "start": 20, "end": 20}],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["scope_compliant"] is True
+    assert payload["scope_violations"] == []
+
+
+def test_patch_guard_rejects_patch_outside_visual_scope():
+    response = client.post(
+        "/api/validate-patch",
+        json={
+            "scope": {
+                "selected_node_id": "statement:app.py:20",
+                "edit_files": ["app.py"],
+                "edit_line_ranges": [{"file": "app.py", "start": 20, "end": 20}],
+            },
+            "changed_files": ["app.py", "config.py"],
+            "changed_line_ranges": [
+                {"file": "app.py", "start": 20, "end": 22},
+                {"file": "config.py", "start": 1, "end": 3},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["scope_compliant"] is False
+    assert len(payload["scope_violations"]) == 2
+
+
 def test_demo_verification_endpoint_returns_real_before_after_evidence():
     trace = client.get("/api/demo-trace").json()
     normalize = next(
