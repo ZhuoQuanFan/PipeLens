@@ -98,6 +98,11 @@ class ScopeContract(BaseModel):
     edit_line_ranges: list[LineRange] = Field(default_factory=list)
 
 
+class ScopeRequest(BaseModel):
+    selected_node_id: str
+    program_nodes: list[ProgramNode] = Field(default_factory=list)
+
+
 class TraceBundle(BaseModel):
     session_id: str
     program_nodes: list[ProgramNode] = Field(default_factory=list)
