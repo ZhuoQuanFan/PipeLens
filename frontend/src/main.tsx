@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { createAgentSession } from "./api/session";
 import { fetchDemoTrace, generateScopeContract } from "./api/trace";
+import type { AgentSession } from "./model/session";
 import type { AgentEvent, ProgramNode, ScopeContract, TraceBundle } from "./model/trace";
 import { VerificationPanel } from "./views/VerificationPanel";
 import "./styles.css";
@@ -25,6 +27,7 @@ function App() {
   const [execution, setExecution] = useState("normalize()");
   const [eventId, setEventId] = useState<string | null>(null);
   const [scopeContract, setScopeContract] = useState<ScopeContract | null>(null);
+  const [agentSession, setAgentSession] = useState<AgentSession | null>(null);
   const [scopeBusy, setScopeBusy] = useState(false);
   const [scopeError, setScopeError] = useState<string | null>(null);
 
@@ -87,6 +90,7 @@ function App() {
 
   useEffect(() => {
     setScopeContract(null);
+    setAgentSession(null);
     setScopeError(null);
   }, [execution, level]);
 
@@ -109,9 +113,11 @@ function App() {
     setScopeBusy(true);
     setScopeError(null);
     try {
-      setScopeContract(await generateScopeContract(targetId, trace.program_nodes));
+      const contract = await generateScopeContract(targetId, trace.program_nodes);
+      setScopeContract(contract);
+      setAgentSession(await createAgentSession({ trace, scope: contract, provider: "generic" }));
     } catch (cause) {
-      setScopeError(cause instanceof Error ? cause.message : "Unable to generate scope");
+      setScopeError(cause instanceof Error ? cause.message : "Unable to start scoped agent session");
     } finally {
       setScopeBusy(false);
     }
@@ -168,15 +174,22 @@ function App() {
         </div>
 
         <aside className="panel scope-panel">
-          <PanelHeading title="Visualization-as-Control" text="Turn the active disclosure node into an explicit agent contract." compact />
+          <PanelHeading title="Visualization-as-Control" text="Turn the active disclosure node into a runtime-enforced agent contract." compact />
           <div className="selection-summary"><span>Active visual scope</span><strong>{current.level}: {current.title}</strong></div>
           <ScopeCard label="Search scope" value={scopePreview.search} icon="⌕" />
           <ScopeCard label="Context scope" value={scopePreview.context} icon="▤" />
           <ScopeCard label="Edit scope" value={scopePreview.edit} icon="✎" />
-          <button className={scopeContract ? "primary-action scope-locked" : "primary-action"} type="button" onClick={focusAgentHere} disabled={scopeBusy || !trace}>
-            {scopeBusy ? "Generating contract…" : scopeContract ? "Scope contract active" : "Focus agent here"}
+          <button className={agentSession ? "primary-action scope-locked" : "primary-action"} type="button" onClick={focusAgentHere} disabled={scopeBusy || !trace}>
+            {scopeBusy ? "Starting scoped session…" : agentSession ? "Scoped agent session active" : "Focus agent here"}
           </button>
-          {scopeContract ? <div className="scope-confirmation">Contract generated from <code>{scopeContract.selected_node_id}</code>. The edit boundary is now explicit and machine-readable.</div> : null}
+          {agentSession ? (
+            <div className="scope-confirmation">
+              <strong>Agent runtime: {agentSession.id}</strong><br />
+              provider {agentSession.provider} · Search Scope authorization on · Patch Guard on · rejected {agentSession.rejected_actions} action(s), {agentSession.rejected_patches} patch(es)
+            </div>
+          ) : scopeContract ? (
+            <div className="scope-confirmation">Scope contract generated from <code>{scopeContract.selected_node_id}</code>.</div>
+          ) : null}
           {scopeError ? <div className="scope-confirmation">{scopeError}</div> : null}
         </aside>
       </section>
