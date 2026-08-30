@@ -100,3 +100,9 @@ class TraceBundle(BaseModel):
     program_nodes: list[ProgramNode] = Field(default_factory=list)
     agent_events: list[AgentEvent] = Field(default_factory=list)
     links: list[ExecutionExplorationLink] = Field(default_factory=list)
+
+
+class CouplingRequest(BaseModel):
+    session_id: str
+    program_nodes: list[ProgramNode] = Field(default_factory=list)
+    agent_events: list[AgentEvent] = Field(default_factory=list)
