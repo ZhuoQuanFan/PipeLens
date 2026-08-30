@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { fetchDemoTrace } from "./api/trace";
-import type { AgentEvent, ProgramNode, TraceBundle } from "./model/trace";
+import { fetchDemoTrace, generateScopeContract } from "./api/trace";
+import type { AgentEvent, ProgramNode, ScopeContract, TraceBundle } from "./model/trace";
 import "./styles.css";
 import "./m2.css";
 
 type Level = "Behavior" | "Logic" | "Function" | "Dataflow" | "Statement";
-type DisclosureNode = { level: Level; title: string; subtitle: string; code?: string };
+type DisclosureNode = { level: Level; title: string; subtitle: string; code?: string; nodeId?: string };
 type ExplorationStatus = "aligned" | "gap" | "context";
 
 const fallback: DisclosureNode[] = [
@@ -23,7 +23,9 @@ function App() {
   const [level, setLevel] = useState(2);
   const [execution, setExecution] = useState("normalize()");
   const [eventId, setEventId] = useState<string | null>(null);
-  const [scopeLocked, setScopeLocked] = useState(false);
+  const [scopeContract, setScopeContract] = useState<ScopeContract | null>(null);
+  const [scopeBusy, setScopeBusy] = useState(false);
+  const [scopeError, setScopeError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDemoTrace()
@@ -82,15 +84,10 @@ function App() {
     return { target, mapped, aligned };
   }, [trace]);
 
-  const scope = {
-    search: `${execution} + callers + callees + tests`,
-    context: `${execution} + runtime values + failing test`,
-    edit: selectedNode?.file
-      ? `${selectedNode.file}:${selectedNode.start_line ?? "?"}-${selectedNode.end_line ?? "?"}`
-      : `${execution} only`,
-  };
-
-  useEffect(() => setScopeLocked(false), [execution]);
+  useEffect(() => {
+    setScopeContract(null);
+    setScopeError(null);
+  }, [execution, level]);
 
   function selectEvent(id: string) {
     setEventId(id);
@@ -104,6 +101,28 @@ function App() {
     const descendants = executedFunctionDescendants(node, trace.program_nodes);
     if (descendants.length === 1) setExecution(descendants[0].label);
   }
+
+  async function focusAgentHere() {
+    const targetId = current.nodeId ?? selectedNode?.id;
+    if (!trace || !targetId) return;
+    setScopeBusy(true);
+    setScopeError(null);
+    try {
+      setScopeContract(await generateScopeContract(targetId, trace.program_nodes));
+    } catch (cause) {
+      setScopeError(cause instanceof Error ? cause.message : "Unable to generate scope");
+    } finally {
+      setScopeBusy(false);
+    }
+  }
+
+  const scopePreview = scopeContract
+    ? summarizeScope(scopeContract)
+    : {
+        search: `${current.level} selection → structural neighbors`,
+        context: `${current.level} selection → evidence context`,
+        edit: `${current.level} visual boundary`,
+      };
 
   return (
     <main className="app-shell">
@@ -148,15 +167,16 @@ function App() {
         </div>
 
         <aside className="panel scope-panel">
-          <PanelHeading title="Visualization-as-Control" text="Turn the selected computation into explicit agent scopes." compact />
-          <div className="selection-summary"><span>Selected computation</span><strong>{execution}</strong></div>
-          <ScopeCard label="Search scope" value={scope.search} icon="⌕" />
-          <ScopeCard label="Context scope" value={scope.context} icon="▤" />
-          <ScopeCard label="Edit scope" value={scope.edit} icon="✎" />
-          <button className={scopeLocked ? "primary-action scope-locked" : "primary-action"} type="button" onClick={() => setScopeLocked((value) => !value)}>
-            {scopeLocked ? "Scope locked for agent" : "Focus agent here"}
+          <PanelHeading title="Visualization-as-Control" text="Turn the active disclosure node into an explicit agent contract." compact />
+          <div className="selection-summary"><span>Active visual scope</span><strong>{current.level}: {current.title}</strong></div>
+          <ScopeCard label="Search scope" value={scopePreview.search} icon="⌕" />
+          <ScopeCard label="Context scope" value={scopePreview.context} icon="▤" />
+          <ScopeCard label="Edit scope" value={scopePreview.edit} icon="✎" />
+          <button className={scopeContract ? "primary-action scope-locked" : "primary-action"} type="button" onClick={focusAgentHere} disabled={scopeBusy || !trace}>
+            {scopeBusy ? "Generating contract…" : scopeContract ? "Scope contract active" : "Focus agent here"}
           </button>
-          {scopeLocked ? <div className="scope-confirmation">The visual selection is now the proposed search/context/edit boundary.</div> : null}
+          {scopeContract ? <div className="scope-confirmation">Contract generated from <code>{scopeContract.selected_node_id}</code>. The edit boundary is now explicit and machine-readable.</div> : null}
+          {scopeError ? <div className="scope-confirmation">{scopeError}</div> : null}
         </aside>
       </section>
 
@@ -175,6 +195,9 @@ function App() {
 function buildDisclosure(node: ProgramNode | undefined, nodes: ProgramNode[]): DisclosureNode[] {
   if (!node) return fallback;
   const byId = new Map(nodes.map((candidate) => [candidate.id, candidate]));
+  const ancestors = ancestorIds(node, nodes).map((id) => byId.get(id)).filter(Boolean) as ProgramNode[];
+  const behavior = ancestors.find((item) => item.level === "behavior");
+  const logic = ancestors.find((item) => item.level === "logic");
   const flows = node.children.map((id) => byId.get(id)).filter((item): item is ProgramNode => item?.level === "dataflow");
   const flow = flows.find((item) => item.expression?.includes("/ span"))
     ?? [...flows].reverse().find((item) => item.dataflow_outputs.includes("return"))
@@ -185,12 +208,21 @@ function buildDisclosure(node: ProgramNode | undefined, nodes: ProgramNode[]): D
     ? `${flow.dataflow_inputs.join(", ") || "constant"} → ${flow.dataflow_outputs.join(", ") || "effect"}`
     : "inputs → computation → outputs";
   return [
-    { level: "Behavior", title: "Input → Output", subtitle: "Observed program behavior" },
-    { level: "Logic", title: `… → ${node.label} → …`, subtitle: "Selected computation in the executed pipeline" },
-    { level: "Function", title: node.label, subtitle: `${location(node)} · ${formatRuntime(node)}` },
-    { level: "Dataflow", title: flowTitle, subtitle: flow ? `${flow.expression ?? flow.label} · ${location(flow)}` : formatRuntime(node) },
-    { level: "Statement", title: statement?.label ?? "source statement", subtitle: statement ? location(statement) : "Concrete implementation", code: statement?.label },
+    { level: "Behavior", title: "Input → Output", subtitle: "Observed program behavior", nodeId: behavior?.id },
+    { level: "Logic", title: `… → ${node.label} → …`, subtitle: "Selected computation in the executed pipeline", nodeId: logic?.id },
+    { level: "Function", title: node.label, subtitle: `${location(node)} · ${formatRuntime(node)}`, nodeId: node.id },
+    { level: "Dataflow", title: flowTitle, subtitle: flow ? `${flow.expression ?? flow.label} · ${location(flow)}` : formatRuntime(node), nodeId: flow?.id },
+    { level: "Statement", title: statement?.label ?? "source statement", subtitle: statement ? location(statement) : "Concrete implementation", code: statement?.label, nodeId: statement?.id },
   ];
+}
+
+function summarizeScope(contract: ScopeContract) {
+  const ranges = contract.edit_line_ranges.map((range) => `${range.file}:${range.start}-${range.end}`);
+  return {
+    search: `${contract.search_node_ids.length} nodes · ${contract.search_files.join(", ") || "no file restriction"}`,
+    context: `${contract.context_node_ids.length} nodes · runtime ${contract.include_runtime_values ? "on" : "off"} · tests ${contract.include_tests ? "on" : "off"}`,
+    edit: ranges.join(", ") || contract.edit_files.join(", ") || "read-only scope",
+  };
 }
 
 function location(node: ProgramNode) {
