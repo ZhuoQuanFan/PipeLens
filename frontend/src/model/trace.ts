@@ -20,6 +20,9 @@ export type ProgramNode = {
   children: string[];
   incoming: string[];
   outgoing: string[];
+  dataflow_inputs: string[];
+  dataflow_outputs: string[];
+  expression?: string | null;
   runtime: RuntimeEvidence;
 };
 
