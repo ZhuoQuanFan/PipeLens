@@ -1,356 +1,77 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { createAgentSession, fetchAgentSession } from "./api/session";
-import { fetchDemoTrace, generateScopeContract } from "./api/trace";
-import type { AgentSession } from "./model/session";
-import type { AgentEvent, ProgramNode, ScopeContract, TraceBundle } from "./model/trace";
-import { VerificationPanel } from "./views/VerificationPanel";
-import "./styles.css";
-import "./m2.css";
 
-type Level = "Behavior" | "Logic" | "Function" | "Dataflow" | "Statement";
-type DisclosureNode = { level: Level; title: string; subtitle: string; code?: string; nodeId?: string };
-type ExplorationStatus = "aligned" | "gap" | "context";
-
-const fallback: DisclosureNode[] = [
-  { level: "Behavior", title: "A → B", subtitle: "Observed transformation" },
-  { level: "Logic", title: "A → normalize → B", subtitle: "Semantic stage" },
-  { level: "Function", title: "normalize(x)", subtitle: "Executed function" },
-  { level: "Dataflow", title: "x → y", subtitle: "Value transformation" },
-  { level: "Statement", title: "source line", subtitle: "Concrete implementation", code: "return [v / span for v in values]" },
-];
+import {
+  findPipeNode,
+  findPipePath,
+  nanoGptAgentReplay,
+  nanoGptCase,
+  type PipeNode,
+} from "./cases/nanogpt";
+import { PipeCanvas, PipeInspector } from "./views/PipeCanvas";
+import "./pipe.css";
 
 function App() {
-  const [trace, setTrace] = useState<TraceBundle | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [level, setLevel] = useState(2);
-  const [execution, setExecution] = useState("normalize()");
-  const [eventId, setEventId] = useState<string | null>(null);
-  const [scopeContract, setScopeContract] = useState<ScopeContract | null>(null);
-  const [agentSession, setAgentSession] = useState<AgentSession | null>(null);
-  const [scopeBusy, setScopeBusy] = useState(false);
-  const [scopeError, setScopeError] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState(nanoGptCase.id);
+  const [selectedId, setSelectedId] = useState("transformer-stack");
+  const [activeAgentStep, setActiveAgentStep] = useState(0);
 
-  useEffect(() => {
-    fetchDemoTrace()
-      .then((bundle) => {
-        setTrace(bundle);
-        const preferred = bundle.program_nodes.find(
-          (node) => node.level === "function" && node.label === "normalize()" && node.runtime.executed,
-        ) ?? bundle.program_nodes.find((node) => node.level === "function" && node.runtime.executed);
-        if (preferred) setExecution(preferred.label);
-        const firstGap = bundle.agent_events.find(
-          (event) => event.target && explorationStatus(event, bundle) === "gap",
-        );
-        setEventId(firstGap?.id ?? bundle.agent_events[0]?.id ?? null);
-      })
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Unable to load trace"));
-  }, []);
+  const focus = useMemo(
+    () => findPipeNode(nanoGptCase, focusId) ?? nanoGptCase,
+    [focusId],
+  );
+  const selected = useMemo(
+    () => findPipeNode(nanoGptCase, selectedId) ?? focus,
+    [selectedId, focus],
+  );
+  const focusPath = useMemo(
+    () => findPipePath(nanoGptCase, focus.id) ?? [nanoGptCase],
+    [focus.id],
+  );
 
-  useEffect(() => {
-    if (!agentSession) return;
-    let cancelled = false;
-
-    const refresh = async () => {
-      try {
-        const latest = await fetchAgentSession(agentSession.id);
-        if (cancelled) return;
-        setAgentSession(latest);
-        setTrace((currentTrace) => currentTrace ? {
-          ...currentTrace,
-          agent_events: latest.agent_events,
-          links: latest.links,
-        } : currentTrace);
-      } catch (cause) {
-        if (!cancelled) setScopeError(cause instanceof Error ? cause.message : "Unable to refresh agent session");
-      }
-    };
-
-    const timer = window.setInterval(refresh, 1200);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [agentSession?.id]);
-
-  const executionItems = useMemo(() => {
-    if (!trace) return ["Input", "preprocess()", "normalize()", "score()", "Output"];
-    const functions = trace.program_nodes
-      .filter((node) => node.level === "function" && node.runtime.executed)
-      .sort((a, b) => (a.runtime.start_time ?? 0) - (b.runtime.start_time ?? 0))
-      .map((node) => node.label);
-    return ["Input", ...functions, "Output"];
-  }, [trace]);
-
-  const selectedNode = trace?.program_nodes.find((node) => node.label === execution);
-  const selectedEvent = trace?.agent_events.find((event) => event.id === eventId);
-  const selectedLink = trace?.links.find((link) => link.agent_event_id === eventId);
-  const linkedNode = trace?.program_nodes.find((node) => node.id === selectedLink?.execution_node_id);
-  const disclosure = buildDisclosure(selectedNode, trace?.program_nodes ?? []);
-  const current = disclosure[level] ?? fallback[level];
-  const status = trace && selectedEvent ? explorationStatus(selectedEvent, trace) : "context";
-  const gap = status === "gap";
-
-  const coupledExecution = useMemo(() => {
-    if (!trace || !linkedNode) return new Set<string>();
-    return new Set(executedFunctionDescendants(linkedNode, trace.program_nodes).map((node) => node.label));
-  }, [trace, linkedNode]);
-
-  const relatedEvents = useMemo(() => {
-    if (!trace || !selectedNode) return new Set<string>();
-    const nodeIds = new Set([selectedNode.id, ...ancestorIds(selectedNode, trace.program_nodes)]);
-    return new Set(trace.links.filter((link) => nodeIds.has(link.execution_node_id)).map((link) => link.agent_event_id));
-  }, [trace, selectedNode]);
-
-  const metrics = useMemo(() => {
-    if (!trace) return { target: 0, mapped: 0, aligned: 0 };
-    const target = trace.agent_events.filter((event) => event.target).length;
-    const mapped = trace.agent_events.filter(
-      (event) => event.target && trace.links.some((link) => link.agent_event_id === event.id),
-    ).length;
-    const aligned = trace.agent_events.filter(
-      (event) => event.target && explorationStatus(event, trace) === "aligned",
-    ).length;
-    return { target, mapped, aligned };
-  }, [trace]);
-
-  useEffect(() => {
-    setScopeContract(null);
-    setAgentSession(null);
-    setScopeError(null);
-  }, [execution, level]);
-
-  function selectEvent(id: string) {
-    setEventId(id);
-    if (!trace) return;
-    const event = trace.agent_events.find((candidate) => candidate.id === id);
-    if (!event || explorationStatus(event, trace) !== "aligned") return;
-    const link = trace.links.find((candidate) => candidate.agent_event_id === id);
-    const node = trace.program_nodes.find((candidate) => candidate.id === link?.execution_node_id);
-    if (!node) return;
-    if (node.level === "function" && node.runtime.executed) return setExecution(node.label);
-    const descendants = executedFunctionDescendants(node, trace.program_nodes);
-    if (descendants.length === 1) setExecution(descendants[0].label);
+  function selectNode(node: PipeNode) {
+    setSelectedId(node.id);
   }
 
-  async function focusAgentHere() {
-    const targetId = current.nodeId ?? selectedNode?.id;
-    if (!trace || !targetId) return;
-    setScopeBusy(true);
-    setScopeError(null);
-    try {
-      const contract = await generateScopeContract(targetId, trace.program_nodes);
-      setScopeContract(contract);
-      setAgentSession(await createAgentSession({ trace, scope: contract, provider: "generic" }));
-    } catch (cause) {
-      setScopeError(cause instanceof Error ? cause.message : "Unable to start scoped agent session");
-    } finally {
-      setScopeBusy(false);
-    }
+  function openNode(node: PipeNode) {
+    if (!node.children?.length) return;
+    setFocusId(node.id);
+    setSelectedId(node.children[0]?.id ?? node.id);
   }
 
-  const scopePreview = scopeContract
-    ? summarizeScope(scopeContract)
-    : {
-        search: `${current.level} selection → structural neighbors`,
-        context: `${current.level} selection → evidence context`,
-        edit: `${current.level} visual boundary`,
-      };
-  const blockedActions = agentSession?.action_decisions.filter((item) => !item.allowed).slice(-3) ?? [];
+  function navigate(node: PipeNode) {
+    setFocusId(node.id);
+    setSelectedId(node.id);
+  }
+
+  function selectAgentStep(index: number) {
+    setActiveAgentStep(index);
+    const step = nanoGptAgentReplay[index];
+    if (!step.nodeId) return;
+    setSelectedId(step.nodeId);
+
+    const path = findPipePath(nanoGptCase, step.nodeId);
+    if (!path?.length) return;
+    const parent = path.at(-2);
+    if (parent) setFocusId(parent.id);
+  }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div><div className="eyebrow">Progressive White-Box Visual Analytics</div><h1>PipeLens</h1></div>
-        <div className="status-pill">{trace ? `trace: ${trace.session_id}` : error ? "offline fallback" : "loading trace…"}</div>
-      </header>
-
-      <section className="panel disclosure-panel">
-        <PanelHeading title="Progressive Computational Disclosure" text="Reveal the same computation from behavior to source-level implementation." />
-        <div className="level-tabs" role="tablist" aria-label="Disclosure level">
-          {disclosure.map((item, index) => (
-            <button key={item.level} className={index === level ? "level-tab active" : "level-tab"} onClick={() => setLevel(index)} type="button">
-              <span>{index + 1}</span>{item.level}
-            </button>
-          ))}
-        </div>
-        <div className="disclosure-stage">
-          <div className="stage-label">Behaviorally opaque</div>
-          <div className="semantic-card">
-            <div className="semantic-title">{current.title}</div>
-            <div className="semantic-subtitle">{current.subtitle}</div>
-            {current.code ? <pre>{current.code}</pre> : null}
-          </div>
-          <div className="stage-label right">Programmatically transparent</div>
-        </div>
-      </section>
-
-      <section className="workspace-grid">
-        <div className="panel coupling-panel">
-          <div className="panel-heading compact">
-            <div><h2>Execution–Exploration Coupling</h2><p>Compare what the program executed with observable coding-agent actions.</p></div>
-            {trace ? <div className="coupling-metrics"><span><strong>{metrics.mapped}</strong>/{metrics.target} mapped</span><span><strong>{metrics.aligned}</strong> runtime-aligned</span></div> : null}
-          </div>
-          <ExecutionLane items={executionItems} selected={execution} coupled={coupledExecution} onSelect={setExecution} />
-          <div className="coupling-divider"><span className={gap ? "gap-marker" : "aligned-marker"}>{gap ? "×" : "↕"}</span></div>
-          <ExplorationLane events={trace?.agent_events ?? []} trace={trace} selectedId={eventId} relatedIds={relatedEvents} onSelect={selectEvent} />
-          <div className={gap ? "gap-callout" : "aligned-callout"}>
-            <strong>{gap ? "Exploration–Execution Gap" : "Execution-supported exploration"}</strong>
-            <span>{couplingDescription(selectedEvent, linkedNode, status)}</span>
-          </div>
-        </div>
-
-        <aside className="panel scope-panel">
-          <PanelHeading title="Visualization-as-Control" text="Turn the active disclosure node into a runtime-enforced agent contract." compact />
-          <div className="selection-summary"><span>Active visual scope</span><strong>{current.level}: {current.title}</strong></div>
-          <ScopeCard label="Search scope" value={scopePreview.search} icon="⌕" />
-          <ScopeCard label="Context scope" value={scopePreview.context} icon="▤" />
-          <ScopeCard label="Edit scope" value={scopePreview.edit} icon="✎" />
-          <button className={agentSession ? "primary-action scope-locked" : "primary-action"} type="button" onClick={focusAgentHere} disabled={scopeBusy || !trace}>
-            {scopeBusy ? "Starting scoped session…" : agentSession ? "Scoped agent session active" : "Focus agent here"}
-          </button>
-          {agentSession ? (
-            <div className="scope-confirmation">
-              <strong>Agent runtime: {agentSession.id}</strong><br />
-              provider {agentSession.provider} · live exploration sync on · rejected {agentSession.rejected_actions} action(s), {agentSession.rejected_patches} patch(es)
-            </div>
-          ) : scopeContract ? (
-            <div className="scope-confirmation">Scope contract generated from <code>{scopeContract.selected_node_id}</code>.</div>
-          ) : null}
-          {blockedActions.length ? (
-            <div className="blocked-action-list">
-              <strong>Blocked by visual Search Scope</strong>
-              {blockedActions.map((item) => <div key={item.event.id}><span>× {targetLabel(item.event)}</span><small>{item.reason}</small></div>)}
-            </div>
-          ) : null}
-          {scopeError ? <div className="scope-confirmation">{scopeError}</div> : null}
-        </aside>
-      </section>
-
-      <VerificationPanel selectedNodeId={current.nodeId ?? selectedNode?.id} />
+    <main className="pipe-app">
+      <PipeCanvas
+        root={nanoGptCase}
+        focus={focus}
+        path={focusPath}
+        selectedId={selected.id}
+        agentSteps={nanoGptAgentReplay}
+        activeAgentStep={activeAgentStep}
+        onSelect={selectNode}
+        onNavigate={navigate}
+        onAgentStep={selectAgentStep}
+      />
+      <PipeInspector node={selected} root={nanoGptCase} onOpen={openNode} />
     </main>
   );
 }
 
-function buildDisclosure(node: ProgramNode | undefined, nodes: ProgramNode[]): DisclosureNode[] {
-  if (!node) return fallback;
-  const byId = new Map(nodes.map((candidate) => [candidate.id, candidate]));
-  const ancestors = ancestorIds(node, nodes).map((id) => byId.get(id)).filter(Boolean) as ProgramNode[];
-  const behavior = ancestors.find((item) => item.level === "behavior");
-  const logic = ancestors.find((item) => item.level === "logic");
-  const flows = node.children.map((id) => byId.get(id)).filter((item): item is ProgramNode => item?.level === "dataflow");
-  const flow = flows.find((item) => item.expression?.includes("/ span"))
-    ?? [...flows].reverse().find((item) => item.dataflow_outputs.includes("return"))
-    ?? flows.at(-1);
-  const statement = flow?.children.map((id) => byId.get(id)).find((item) => item?.level === "statement")
-    ?? node.children.map((id) => byId.get(id)).find((item) => item?.level === "statement");
-  const flowTitle = flow
-    ? `${flow.dataflow_inputs.join(", ") || "constant"} → ${flow.dataflow_outputs.join(", ") || "effect"}`
-    : "inputs → computation → outputs";
-  return [
-    { level: "Behavior", title: "Input → Output", subtitle: "Observed program behavior", nodeId: behavior?.id },
-    { level: "Logic", title: `… → ${node.label} → …`, subtitle: "Selected computation in the executed pipeline", nodeId: logic?.id },
-    { level: "Function", title: node.label, subtitle: `${location(node)} · ${formatRuntime(node)}`, nodeId: node.id },
-    { level: "Dataflow", title: flowTitle, subtitle: flow ? `${flow.expression ?? flow.label} · ${location(flow)}` : formatRuntime(node), nodeId: flow?.id },
-    { level: "Statement", title: statement?.label ?? "source statement", subtitle: statement ? location(statement) : "Concrete implementation", code: statement?.label, nodeId: statement?.id },
-  ];
-}
-
-function summarizeScope(contract: ScopeContract) {
-  const ranges = contract.edit_line_ranges.map((range) => `${range.file}:${range.start}-${range.end}`);
-  return {
-    search: `${contract.search_node_ids.length} nodes · ${contract.search_files.join(", ") || "no file restriction"}`,
-    context: `${contract.context_node_ids.length} nodes · runtime ${contract.include_runtime_values ? "on" : "off"} · tests ${contract.include_tests ? "on" : "off"}`,
-    edit: ranges.join(", ") || contract.edit_files.join(", ") || "read-only scope",
-  };
-}
-
-function location(node: ProgramNode) {
-  return node.file ? `${node.file}:${node.start_line ?? "?"}` : "source";
-}
-
-function formatRuntime(node: ProgramNode) {
-  const inputs = Object.entries(node.runtime.input_values ?? {}).map(([key, value]) => `${key}=${String(value)}`).join(", ");
-  const output = node.runtime.output_values?.return;
-  return [inputs && `in: ${inputs}`, output !== undefined && `out: ${String(output)}`].filter(Boolean).join(" · ") || "Runtime values unavailable";
-}
-
-function ancestorIds(node: ProgramNode, nodes: ProgramNode[]) {
-  const byId = new Map(nodes.map((candidate) => [candidate.id, candidate]));
-  const result: string[] = [];
-  let parentId = node.parent_id;
-  while (parentId) {
-    result.push(parentId);
-    parentId = byId.get(parentId)?.parent_id ?? null;
-  }
-  return result;
-}
-
-function executedFunctionDescendants(node: ProgramNode, nodes: ProgramNode[]): ProgramNode[] {
-  if (node.level === "function") return node.runtime.executed ? [node] : [];
-  const byId = new Map(nodes.map((candidate) => [candidate.id, candidate]));
-  const queue = [...node.children];
-  const visited = new Set<string>();
-  const result: ProgramNode[] = [];
-  while (queue.length) {
-    const id = queue.shift()!;
-    if (visited.has(id)) continue;
-    visited.add(id);
-    const child = byId.get(id);
-    if (!child) continue;
-    if (child.level === "function" && child.runtime.executed) result.push(child);
-    queue.push(...child.children);
-  }
-  return result;
-}
-
-function explorationStatus(event: AgentEvent, trace: TraceBundle): ExplorationStatus {
-  if (!event.target) return "context";
-  const link = trace.links.find((candidate) => candidate.agent_event_id === event.id);
-  const node = trace.program_nodes.find((candidate) => candidate.id === link?.execution_node_id);
-  if (!node) return "gap";
-  return node.runtime.executed || executedFunctionDescendants(node, trace.program_nodes).length ? "aligned" : "gap";
-}
-
-function couplingDescription(event: AgentEvent | undefined, node: ProgramNode | undefined, status: ExplorationStatus) {
-  if (!event) return "Select an observable agent action to inspect its relation to runtime evidence.";
-  const target = targetLabel(event);
-  if (status === "context") return `${event.type} is a contextual agent action without a direct program target.`;
-  if (status === "gap") return node
-    ? `The agent inspected ${target}, but this region has no execution evidence in the selected run.`
-    : `The agent inspected ${target}, but PipeLens cannot map that action to the current program execution.`;
-  return `The agent action on ${target} maps to ${node?.label ?? "an executed region"} with runtime support.`;
-}
-
-function targetLabel(event: AgentEvent) {
-  if (event.target?.symbol) return `${event.target.symbol}()`;
-  if (event.target?.file) return event.target.file;
-  if (typeof event.observable_input === "string") return event.observable_input;
-  return event.type.replaceAll("_", " ");
-}
-
-function PanelHeading({ title, text, compact = false }: { title: string; text: string; compact?: boolean }) {
-  return <div className={compact ? "panel-heading compact" : "panel-heading"}><div><h2>{title}</h2><p>{text}</p></div></div>;
-}
-
-function ExecutionLane({ items, selected, coupled, onSelect }: { items: string[]; selected: string; coupled: Set<string>; onSelect: (value: string) => void }) {
-  return <div className="pipeline-lane execution"><div className="lane-label"><strong>Program execution</strong><span>What actually ran</span></div><div className="lane-flow">
-    {items.map((item, index) => <React.Fragment key={`${item}-${index}`}><button className={`pipeline-node${item === selected ? " selected" : ""}${coupled.has(item) ? " coupled" : ""}`} type="button" onClick={() => item !== "Input" && item !== "Output" && onSelect(item)}>{item}</button>{index < items.length - 1 ? <span className="flow-arrow">→</span> : null}</React.Fragment>)}
-  </div></div>;
-}
-
-function ExplorationLane({ events, trace, selectedId, relatedIds, onSelect }: { events: AgentEvent[]; trace: TraceBundle | null; selectedId: string | null; relatedIds: Set<string>; onSelect: (id: string) => void }) {
-  return <div className="pipeline-lane exploration exploration-rich"><div className="lane-label"><strong>AI exploration</strong><span>Observable agent actions</span></div><div className="agent-event-flow">
-    {events.length === 0 ? <span className="empty-events">No agent events loaded</span> : null}
-    {events.map((event, index) => {
-      const eventStatus = trace ? explorationStatus(event, trace) : "context";
-      return <React.Fragment key={event.id}><button className={`agent-event-node ${eventStatus}${event.id === selectedId ? " selected" : ""}${relatedIds.has(event.id) ? " coupled" : ""}`} type="button" onClick={() => onSelect(event.id)}><span className="event-index">{index + 1}</span><span className="event-type">{event.type.replaceAll("_", " ")}</span><strong>{targetLabel(event)}</strong><small>{eventStatus === "aligned" ? "runtime-linked" : eventStatus}</small></button>{index < events.length - 1 ? <span className="flow-arrow">→</span> : null}</React.Fragment>;
-    })}
-  </div></div>;
-}
-
-function ScopeCard({ label, value, icon }: { label: string; value: string; icon: string }) {
-  return <div className="scope-card"><div className="scope-icon">{icon}</div><div><strong>{label}</strong><p>{value}</p></div></div>;
-}
-
-createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
+createRoot(document.getElementById("root")!).render(<App />);
