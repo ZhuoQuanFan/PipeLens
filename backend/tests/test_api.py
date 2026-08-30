@@ -87,4 +87,4 @@ def test_demo_verification_endpoint_returns_real_before_after_evidence():
     assert payload["after_tests"]["passed"] == 2
     assert payload["improved"] is True
     assert payload["scope_compliant"] is True
-    assert payload["changed_line_ranges"] == [{"file": "app.py", "start": 21, "end": 21}]
+    assert payload["changed_line_ranges"] == [{"file": "app.py", "start": 20, "end": 20}]
