@@ -1,11 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.analysis.coupling import build_execution_exploration_links
-from app.models.trace import CouplingRequest, TraceBundle
+from app.models.trace import CouplingRequest, ScopeContract, ScopeRequest, TraceBundle
 from app.services.demo import build_demo_trace
+from app.services.scope import build_scope_contract
 
-app = FastAPI(title="PipeLens API", version="0.2.0")
+app = FastAPI(title="PipeLens API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,13 +29,7 @@ def demo_trace() -> TraceBundle:
 
 @app.post("/api/couple", response_model=TraceBundle)
 def couple_trace(request: CouplingRequest) -> TraceBundle:
-    """Couple external coding-agent events with a program trace.
-
-    Coding-agent integrations only need to emit the observable AgentEvent
-    schema. PipeLens owns the mapping step so the visualization does not depend
-    on a specific agent framework.
-    """
-
+    """Couple external coding-agent events with a program trace."""
     links = build_execution_exploration_links(request.program_nodes, request.agent_events)
     return TraceBundle(
         session_id=request.session_id,
@@ -42,3 +37,12 @@ def couple_trace(request: CouplingRequest) -> TraceBundle:
         agent_events=request.agent_events,
         links=links,
     )
+
+
+@app.post("/api/scope", response_model=ScopeContract)
+def generate_scope(request: ScopeRequest) -> ScopeContract:
+    """Translate a visual program selection into search/context/edit bounds."""
+    try:
+        return build_scope_contract(request.program_nodes, request.selected_node_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
