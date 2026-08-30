@@ -3,12 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.analysis.coupling import build_execution_exploration_links
 from app.models.trace import CouplingRequest, ScopeContract, ScopeRequest, TraceBundle
-from app.models.verification import VerificationReport
+from app.models.verification import PatchScopeRequest, PatchScopeResult, VerificationReport
 from app.services.demo import build_demo_trace
 from app.services.scope import build_scope_contract
-from app.services.verification import build_demo_verification
+from app.services.verification import build_demo_verification, validate_patch_scope
 
-app = FastAPI(title="PipeLens API", version="0.4.0")
+app = FastAPI(title="PipeLens API", version="0.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +48,18 @@ def generate_scope(request: ScopeRequest) -> ScopeContract:
         return build_scope_contract(request.program_nodes, request.selected_node_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/validate-patch", response_model=PatchScopeResult)
+def validate_patch(request: PatchScopeRequest) -> PatchScopeResult:
+    """Reject candidate edits that exceed a visualization-derived edit scope."""
+    return PatchScopeResult(
+        scope_violations=validate_patch_scope(
+            request.changed_files,
+            request.changed_line_ranges,
+            request.scope,
+        )
+    )
 
 
 @app.get("/api/demo-verification", response_model=VerificationReport)
