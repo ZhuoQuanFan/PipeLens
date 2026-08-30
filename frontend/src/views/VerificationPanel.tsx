@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchDemoVerification } from "../api/verification";
 import type { VerificationReport } from "../model/verification";
+import "../m5.css";
 
 export function VerificationPanel({ selectedNodeId }: { selectedNodeId?: string }) {
   const [report, setReport] = useState<VerificationReport | null>(null);
