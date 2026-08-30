@@ -20,6 +20,15 @@
   color: #20314b;
 }
 
+.execution .pipeline-node.coupled {
+  outline: 2px dotted #2c61ca;
+  outline-offset: 2px;
+}
+
+.execution .pipeline-node.selected.coupled {
+  box-shadow: inset 0 -3px 0 #2c61ca;
+}
+
 .exploration-rich {
   align-items: start;
 }
@@ -123,6 +132,10 @@
 .agent-event-node.context {
   border-color: #aebaca;
   background: #fafbfd;
+}
+
+.agent-event-node.coupled {
+  box-shadow: inset 0 -3px 0 #2c61ca;
 }
 
 .agent-event-node.selected {
