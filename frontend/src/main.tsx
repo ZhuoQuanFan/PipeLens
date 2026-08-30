@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { fetchDemoTrace, generateScopeContract } from "./api/trace";
 import type { AgentEvent, ProgramNode, ScopeContract, TraceBundle } from "./model/trace";
+import { VerificationPanel } from "./views/VerificationPanel";
 import "./styles.css";
 import "./m2.css";
 
@@ -180,14 +181,7 @@ function App() {
         </aside>
       </section>
 
-      <section className="panel verification-panel">
-        <PanelHeading title="Verification" text="Use explicit evidence rather than decorative scores." compact />
-        <div className="verification-grid">
-          <div className="verification-card before"><span>Before patch</span><strong>0 / 2 tests passed</strong><small>Normalization behavior is incorrect.</small></div>
-          <div className="verification-arrow">→</div>
-          <div className="verification-card after"><span>Target after patch</span><strong>2 / 2 tests passed</strong><small>Edit remains inside the selected scope.</small></div>
-        </div>
-      </section>
+      <VerificationPanel selectedNodeId={current.nodeId ?? selectedNode?.id} />
     </main>
   );
 }
@@ -303,8 +297,8 @@ function ExplorationLane({ events, trace, selectedId, relatedIds, onSelect }: { 
   return <div className="pipeline-lane exploration exploration-rich"><div className="lane-label"><strong>AI exploration</strong><span>Observable agent actions</span></div><div className="agent-event-flow">
     {events.length === 0 ? <span className="empty-events">No agent events loaded</span> : null}
     {events.map((event, index) => {
-      const status = trace ? explorationStatus(event, trace) : "context";
-      return <React.Fragment key={event.id}><button className={`agent-event-node ${status}${event.id === selectedId ? " selected" : ""}${relatedIds.has(event.id) ? " coupled" : ""}`} type="button" onClick={() => onSelect(event.id)}><span className="event-index">{index + 1}</span><span className="event-type">{event.type.replaceAll("_", " ")}</span><strong>{targetLabel(event)}</strong><small>{status === "aligned" ? "runtime-linked" : status}</small></button>{index < events.length - 1 ? <span className="flow-arrow">→</span> : null}</React.Fragment>;
+      const eventStatus = trace ? explorationStatus(event, trace) : "context";
+      return <React.Fragment key={event.id}><button className={`agent-event-node ${eventStatus}${event.id === selectedId ? " selected" : ""}${relatedIds.has(event.id) ? " coupled" : ""}`} type="button" onClick={() => onSelect(event.id)}><span className="event-index">{index + 1}</span><span className="event-type">{event.type.replaceAll("_", " ")}</span><strong>{targetLabel(event)}</strong><small>{eventStatus === "aligned" ? "runtime-linked" : eventStatus}</small></button>{index < events.length - 1 ? <span className="flow-arrow">→</span> : null}</React.Fragment>;
     })}
   </div></div>;
 }
