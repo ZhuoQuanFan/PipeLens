@@ -2,13 +2,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.analysis.coupling import build_execution_exploration_links
+from app.models.session import (
+    AgentActionDecision,
+    AgentActionRequest,
+    AgentSession,
+    AgentSessionStartRequest,
+    CandidatePatchRequest,
+    PatchDecision,
+)
 from app.models.trace import CouplingRequest, ScopeContract, ScopeRequest, TraceBundle
 from app.models.verification import PatchScopeRequest, PatchScopeResult, VerificationReport
 from app.services.demo import build_demo_trace
 from app.services.scope import build_scope_contract
+from app.services.session import agent_session_store
 from app.services.verification import build_demo_verification, validate_patch_scope
 
-app = FastAPI(title="PipeLens API", version="0.5.0")
+app = FastAPI(title="PipeLens API", version="0.6.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,6 +69,38 @@ def validate_patch(request: PatchScopeRequest) -> PatchScopeResult:
             request.scope,
         )
     )
+
+
+@app.post("/api/agent-sessions", response_model=AgentSession)
+def create_agent_session(request: AgentSessionStartRequest) -> AgentSession:
+    """Create a provider-neutral coding-agent session bound to a visual scope."""
+    return agent_session_store.create(request)
+
+
+@app.get("/api/agent-sessions/{session_id}", response_model=AgentSession)
+def get_agent_session(session_id: str) -> AgentSession:
+    try:
+        return agent_session_store.get(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/agent-sessions/{session_id}/actions", response_model=AgentActionDecision)
+def authorize_agent_action(session_id: str, request: AgentActionRequest) -> AgentActionDecision:
+    """Authorize a proposed observable agent action against Search Scope."""
+    try:
+        return agent_session_store.authorize_and_record_action(session_id, request.event)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/agent-sessions/{session_id}/candidate-patch", response_model=PatchDecision)
+def submit_candidate_patch(session_id: str, request: CandidatePatchRequest) -> PatchDecision:
+    """Authorize a candidate patch against Edit Scope before application."""
+    try:
+        return agent_session_store.submit_candidate_patch(session_id, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/demo-verification", response_model=VerificationReport)
