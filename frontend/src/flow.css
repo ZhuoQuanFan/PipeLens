@@ -30,7 +30,10 @@
 .flow-live { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #a8b2ba; box-shadow: 0 0 0 4px rgba(168,178,186,.13); }
 .live-dot.running { background: var(--pipe-blue); animation: livePulse 1.1s infinite; }
+.live-dot.blocked { background: var(--pipe-red); box-shadow: 0 0 0 5px rgba(224,75,72,.14); animation: blockedPulse .8s ease-in-out infinite; }
+.flow-live.blocked span,.flow-live.blocked strong { color: var(--pipe-red-dark); }
 @keyframes livePulse { 50% { box-shadow: 0 0 0 7px rgba(45,127,232,0); } }
+@keyframes blockedPulse { 50% { box-shadow: 0 0 0 9px rgba(224,75,72,0); } }
 .flow-live span { display: block; font-size: 7px; font-weight: 900; letter-spacing: .12em; color: var(--pipe-muted); }
 .flow-live strong { display: block; max-width: 330px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; margin-top: 1px; }
 .flow-controls { display: flex; gap: 6px; align-items: center; }
@@ -177,10 +180,19 @@
   border-radius: 13px;
   z-index: 4;
 }
-.canal-mode .pipe-component.future { filter: saturate(.45); opacity: .76; }
+.canal-mode .pipe-component.future {
+  filter: grayscale(.18) saturate(.18);
+  opacity: .58;
+  border-color: #aeb9c2;
+  box-shadow: inset 0 1px #fff, 0 7px 12px rgba(48,63,77,.07);
+}
 .canal-mode .pipe-component.active { transform: translateY(-3px) scale(1.025); }
 .canal-mode .pipe-component.active.healthy { box-shadow: 0 0 0 5px rgba(45,127,232,.12), 0 14px 22px rgba(31,72,112,.16); }
-.canal-mode .pipe-component.active.fault { box-shadow: 0 0 0 5px rgba(224,75,72,.12), 0 14px 22px rgba(112,39,37,.16); }
+.canal-mode .pipe-component.active.fault {
+  animation: faultBoundary .72s ease-in-out infinite;
+  box-shadow: 0 0 0 5px rgba(224,75,72,.16), 0 14px 22px rgba(112,39,37,.2);
+}
+@keyframes faultBoundary { 50% { transform: translateY(-3px) scale(1.04); box-shadow: 0 0 0 9px rgba(224,75,72,0), 0 14px 24px rgba(112,39,37,.24); } }
 .component-flow-window {
   height: 9px;
   margin: 8px 8px 0;
@@ -197,6 +209,22 @@
 .pipe-component.active .component-flow-window i { animation: waterRush .38s linear infinite; }
 .pipe-component.passed .component-flow-window i { animation: waterDrift 1.2s linear infinite; }
 
+.fault-stop-callout {
+  width: min(720px, 88%);
+  margin: 12px auto 0;
+  border: 1px solid rgba(224,75,72,.4);
+  border-left: 4px solid var(--pipe-red);
+  border-radius: 9px;
+  background: rgba(255,247,247,.94);
+  padding: 9px 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: #783436;
+}
+.fault-stop-callout strong { font-size: 10px; white-space: nowrap; }
+.fault-stop-callout span { font-size: 9px; color: #8c5658; }
+
 .flow-progress {
   width: min(760px, 84%);
   height: 4px;
@@ -205,7 +233,8 @@
   background: #cad3da;
   overflow: hidden;
 }
-.flow-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--pipe-blue),#6abfff,var(--pipe-red)); transition: width .3s ease; }
+.flow-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--pipe-blue),#6abfff); transition: width .3s ease; }
+.flow-progress span.blocked { background: linear-gradient(90deg,var(--pipe-blue) 0 72%,var(--pipe-red) 92% 100%); }
 
 @media (max-width: 1180px) {
   .canal-board { max-width: 100%; }
@@ -216,4 +245,5 @@
 @media (max-width: 980px) {
   .flow-toolbar { position: static; margin: -62px 0 18px; }
   .pipe-viewport.canal-mode { padding-top: 76px; }
+  .fault-stop-callout { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
