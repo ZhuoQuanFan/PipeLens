@@ -11,6 +11,7 @@
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
     "d3": "^7.9.0",
+    "pixi.js": "^8.20.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "vite": "^7.1.3",
