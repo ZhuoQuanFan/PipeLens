@@ -11,6 +11,7 @@ import {
 import { PipeCanvas, PipeInspector } from "./views/PipeCanvas";
 import "./pipe.css";
 import "./flow.css";
+import "./responsive.css";
 
 function App() {
   const [focusId, setFocusId] = useState(nanoGptCase.id);
