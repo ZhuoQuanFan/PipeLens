@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+
 import type { PipeNode, ScriptedAgentStep } from "../cases/nanogpt";
 
 type Props = {
@@ -12,6 +14,11 @@ type Props = {
   onAgentStep: (index: number) => void;
 };
 
+type FlowPhase = "future" | "active" | "passed";
+type IndexedNode = { node: PipeNode; index: number };
+
+const ITEMS_PER_ROW = 4;
+
 export function PipeCanvas({
   root,
   focus,
@@ -24,17 +31,47 @@ export function PipeCanvas({
   onAgentStep,
 }: Props) {
   const visible = focus.children?.length ? focus.children : [focus];
-  const hasFault = visible.some((node) => node.status === "fault");
+  const rows = useMemo(() => chunkIndexed(visible, ITEMS_PER_ROW), [visible]);
+  const [flowIndex, setFlowIndex] = useState(-1);
+  const [playing, setPlaying] = useState(true);
+  const [speed, setSpeed] = useState(1);
+
+  useEffect(() => {
+    setFlowIndex(-1);
+    setPlaying(true);
+  }, [focus.id]);
+
+  useEffect(() => {
+    if (!playing) return;
+    const interval = window.setInterval(() => {
+      setFlowIndex((current) => {
+        if (current >= visible.length) {
+          setPlaying(false);
+          return current;
+        }
+        return current + 1;
+      });
+    }, Math.max(180, 900 / speed));
+    return () => window.clearInterval(interval);
+  }, [playing, speed, visible.length]);
+
+  const activeNode = flowIndex >= 0 && flowIndex < visible.length ? visible[flowIndex] : undefined;
+  const currentLabel = flowIndex < 0 ? "source" : flowIndex >= visible.length ? "output" : activeNode?.label ?? "flow";
+
+  function restartFlow() {
+    setFlowIndex(-1);
+    setPlaying(true);
+  }
 
   return (
     <section className="pipe-stage" aria-label="Code pipeline visualization">
       <header className="pipe-stage-header">
         <div>
           <div className="case-kicker">FAMOUS CODE CASE · karpathy/nanoGPT</div>
-          <h1>Code as an expandable pipe system</h1>
+          <h1>Watch code flow through an expandable pipe network</h1>
           <p>
-            Blue pipes carry normal execution. Red pipes mark the fault-propagation path in a
-            fault-injected replay. Click a component to open the smaller computation inside it.
+            Inspired by classic Nokia Canal Control: execution enters from the source and fills the
+            code pipe piece by piece. Healthy flow is blue; the fault-propagation path turns red.
           </p>
         </div>
         <div className="case-badge">fault-injected replay · original nanoGPT is not modified</div>
@@ -50,48 +87,92 @@ export function PipeCanvas({
         ))}
       </nav>
 
-      <div className="pipe-viewport">
-        <div className="pipe-legend">
-          <span><i className="legend-line healthy" />normal execution</span>
-          <span><i className="legend-line fault" />fault propagation</span>
-          <span><i className="legend-agent" />scripted agent inspection</span>
+      <div className="pipe-viewport canal-mode">
+        <div className="flow-toolbar">
+          <div className="flow-live">
+            <i className={playing ? "live-dot running" : "live-dot"} />
+            <div><span>CODE FLOW</span><strong>{currentLabel}</strong></div>
+          </div>
+          <div className="flow-controls">
+            <button type="button" onClick={() => setPlaying((value) => !value)}>{playing ? "Pause" : "Play"}</button>
+            <button type="button" onClick={restartFlow}>Restart</button>
+            <label>
+              speed
+              <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
+                <option value={0.6}>0.6×</option>
+                <option value={1}>1×</option>
+                <option value={1.8}>1.8×</option>
+                <option value={3}>3×</option>
+              </select>
+            </label>
+          </div>
         </div>
 
-        <div className={`pipe-network ${hasFault ? "has-fault" : ""}`}>
-          <Terminal label={path.length === 1 ? "Tokens" : "IN"} side="left" status={focus.status} />
-          <div className={`pipe-segment inlet ${focus.status === "fault" ? "fault" : "healthy"}`} />
+        <div className="pipe-legend canal-legend">
+          <span><i className="legend-line healthy" />normal flow</span>
+          <span><i className="legend-line fault" />fault flow</span>
+          <span><i className="legend-line empty" />not executed yet</span>
+          <span><i className="legend-agent" />agent inspection</span>
+        </div>
 
-          <div className="pipe-parts">
-            {visible.map((node, index) => {
-              const next = visible[index + 1];
-              const pipeStatus = node.status === "fault" || next?.status === "fault" ? "fault" : "healthy";
-              return (
-                <div className="pipe-part-group" key={node.id}>
-                  <Part
-                    node={node}
-                    selected={node.id === selectedId}
-                    agentActive={agentSteps[activeAgentStep]?.nodeId === node.id}
-                    onClick={() => onSelect(node)}
-                  />
-                  {index < visible.length - 1 ? <div className={`pipe-segment between ${pipeStatus}`} /> : null}
+        <div className="canal-board">
+          {rows.map((row, rowIndex) => {
+            const reverse = rowIndex % 2 === 1;
+            const lastRow = rowIndex === rows.length - 1;
+            const nextRow = rows[rowIndex + 1];
+            return (
+              <div className="canal-row-wrap" key={`row-${rowIndex}`}>
+                <div className={`canal-row ${reverse ? "reverse" : "forward"}`}>
+                  {rowIndex === 0 ? <Terminal label={path.length === 1 ? "TOKENS" : "IN"} status="healthy" flowing={flowIndex >= -1} /> : null}
+                  {row.map(({ node, index }) => (
+                    <div className="canal-step" key={node.id}>
+                      <FlowPipe
+                        phase={phaseForStep(flowIndex, index)}
+                        status={node.status}
+                        reverse={reverse}
+                      />
+                      <Part
+                        node={node}
+                        selected={node.id === selectedId}
+                        agentActive={agentSteps[activeAgentStep]?.nodeId === node.id}
+                        flowPhase={phaseForStep(flowIndex, index)}
+                        onClick={() => onSelect(node)}
+                      />
+                    </div>
+                  ))}
+                  {lastRow ? (
+                    <>
+                      <FlowPipe
+                        phase={phaseForStep(flowIndex, visible.length)}
+                        status={visible.at(-1)?.status ?? focus.status}
+                        reverse={reverse}
+                      />
+                      <Terminal label={path.length === 1 ? "LOGITS" : "OUT"} status={visible.at(-1)?.status ?? focus.status} flowing={flowIndex >= visible.length} />
+                    </>
+                  ) : null}
                 </div>
-              );
-            })}
-          </div>
-
-          <div className={`pipe-segment outlet ${focus.status === "fault" ? "fault" : "healthy"}`} />
-          <Terminal label={path.length === 1 ? "Logits" : "OUT"} side="right" status={focus.status} />
+                {!lastRow && nextRow ? (
+                  <FlowTurn
+                    side={reverse ? "left" : "right"}
+                    phase={phaseForStep(flowIndex, nextRow[0].index)}
+                    status={nextRow[0].node.status}
+                    reverseNext={!reverse}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
         </div>
 
-        {focus.children?.length ? (
-          <div className="drill-hint">
-            <span>↳</span>
-            {focus.label} contains {focus.children.length} smaller computation part{focus.children.length === 1 ? "" : "s"}.
-            Click a component to drill deeper.
-          </div>
-        ) : (
-          <div className="drill-hint leaf"><span>•</span>Lowest visible semantic unit. Use the inspector to view its code anchor.</div>
-        )}
+        <div className="flow-progress">
+          <span style={{ width: `${Math.max(0, Math.min(100, ((flowIndex + 1) / (visible.length + 1)) * 100))}%` }} />
+        </div>
+        <div className="drill-hint">
+          <span>↳</span>
+          {focus.children?.length
+            ? `${focus.label} contains ${focus.children.length} parts. Click any component to open its internal pipe network.`
+            : "Lowest visible semantic unit. Use the inspector to view the source anchor."}
+        </div>
       </div>
 
       <AgentReplay steps={agentSteps} active={activeAgentStep} onStep={onAgentStep} />
@@ -99,10 +180,59 @@ export function PipeCanvas({
   );
 }
 
-function Terminal({ label, side, status }: { label: string; side: "left" | "right"; status: PipeNode["status"] }) {
+function chunkIndexed(nodes: PipeNode[], size: number): IndexedNode[][] {
+  const indexed = nodes.map((node, index) => ({ node, index }));
+  const rows: IndexedNode[][] = [];
+  for (let start = 0; start < indexed.length; start += size) rows.push(indexed.slice(start, start + size));
+  return rows;
+}
+
+function phaseForStep(flowIndex: number, step: number): FlowPhase {
+  if (flowIndex > step) return "passed";
+  if (flowIndex === step) return "active";
+  return "future";
+}
+
+function FlowPipe({ phase, status, reverse }: { phase: FlowPhase; status: PipeNode["status"]; reverse?: boolean }) {
   return (
-    <div className={`pipe-terminal ${side} ${status === "fault" ? "fault" : "healthy"}`}>
-      <div className="terminal-cap" />
+    <div className={`flow-pipe horizontal ${phase} ${status === "fault" ? "fault" : "healthy"} ${reverse ? "reverse" : ""}`}>
+      <i />
+    </div>
+  );
+}
+
+function FlowTurn({
+  side,
+  phase,
+  status,
+  reverseNext,
+}: {
+  side: "left" | "right";
+  phase: FlowPhase;
+  status: PipeNode["status"];
+  reverseNext: boolean;
+}) {
+  return (
+    <div className={`flow-turn ${side} ${phase} ${status === "fault" ? "fault" : "healthy"} ${reverseNext ? "reverse-next" : ""}`}>
+      <div className="turn-vertical"><i /></div>
+      <div className="turn-elbow top"><i /></div>
+      <div className="turn-elbow bottom"><i /></div>
+    </div>
+  );
+}
+
+function Terminal({
+  label,
+  status,
+  flowing,
+}: {
+  label: string;
+  status: PipeNode["status"];
+  flowing: boolean;
+}) {
+  return (
+    <div className={`canal-terminal ${status === "fault" ? "fault" : "healthy"} ${flowing ? "flowing" : ""}`}>
+      <div className="terminal-gauge"><i /></div>
       <strong>{label}</strong>
     </div>
   );
@@ -112,28 +242,29 @@ function Part({
   node,
   selected,
   agentActive,
+  flowPhase,
   onClick,
 }: {
   node: PipeNode;
   selected: boolean;
   agentActive: boolean;
+  flowPhase: FlowPhase;
   onClick: () => void;
 }) {
   const expandable = Boolean(node.children?.length);
   return (
     <button
       type="button"
-      className={`pipe-component ${node.status} ${selected ? "selected" : ""} ${agentActive ? "agent-active" : ""}`}
+      className={`pipe-component ${node.status} ${flowPhase} ${selected ? "selected" : ""} ${agentActive ? "agent-active" : ""}`}
       onClick={onClick}
       title={expandable ? `Open ${node.label}` : node.anchor?.source ?? node.label}
     >
-      <span className="component-bolt tl" />
-      <span className="component-bolt tr" />
-      <span className="component-bolt bl" />
-      <span className="component-bolt br" />
+      <span className="component-bolt tl" /><span className="component-bolt tr" />
+      <span className="component-bolt bl" /><span className="component-bolt br" />
       <span className="component-level">{node.level}</span>
       <strong>{node.label}</strong>
       {node.subtitle ? <small>{node.subtitle}</small> : null}
+      <div className="component-flow-window"><i /></div>
       {expandable ? <span className="component-expand">open ×{node.children?.length}</span> : <span className="component-expand leaf">source</span>}
       {node.status === "fault" ? <span className="fault-flag">!</span> : null}
       {agentActive ? <span className="agent-probe">AI</span> : null}
@@ -151,16 +282,8 @@ function AgentReplay({ steps, active, onStep }: { steps: ScriptedAgentStep[]; ac
       </div>
       <div className="agent-track">
         {steps.map((step, index) => (
-          <button
-            type="button"
-            key={step.id}
-            onClick={() => onStep(index)}
-            className={`${step.state} ${index === active ? "active" : ""}`}
-            aria-label={`${step.action} ${step.target}`}
-          >
-            <i>{index + 1}</i>
-            <span>{step.action}</span>
-            <strong>{step.target}</strong>
+          <button type="button" key={step.id} onClick={() => onStep(index)} className={`${step.state} ${index === active ? "active" : ""}`}>
+            <i>{index + 1}</i><span>{step.action}</span><strong>{step.target}</strong>
           </button>
         ))}
       </div>
@@ -173,36 +296,19 @@ export function PipeInspector({ node, root, onOpen }: { node: PipeNode; root: Pi
     <aside className="pipe-inspector">
       <div className="inspector-eyebrow">SELECTED PART</div>
       <h2>{node.label}</h2>
-      <div className={`inspector-state ${node.status}`}>
-        <i />{node.status === "fault" ? "fault path" : node.status === "healthy" ? "normal path" : "structural"}
-      </div>
-
+      <div className={`inspector-state ${node.status}`}><i />{node.status === "fault" ? "fault path" : node.status === "healthy" ? "normal path" : "structural"}</div>
       <dl>
         <div><dt>semantic level</dt><dd>{node.level}</dd></div>
         <div><dt>source</dt><dd>{node.anchor?.file ?? "—"}</dd></div>
         <div><dt>symbol</dt><dd>{node.anchor?.symbol ?? "—"}</dd></div>
       </dl>
-
       {node.anchor?.source ? <pre className="source-anchor"><code>{node.anchor.source}</code></pre> : null}
-      {node.children?.length ? (
-        <button className="open-part" type="button" onClick={() => onOpen(node)}>
-          Open component internals <span>→</span>
-        </button>
-      ) : null}
-
+      {node.children?.length ? <button className="open-part" type="button" onClick={() => onOpen(node)}>Open component internals <span>→</span></button> : null}
       <div className="inspector-note">
         <strong>Visual scope</strong>
-        <p>
-          Selecting this part can later become the Search / Context / Edit boundary for the coding agent.
-          The current iteration uses a scripted exploration trace.
-        </p>
+        <p>Selecting this component later becomes the Search / Context / Edit boundary for the coding agent. The current agent layer is a scripted observable replay.</p>
       </div>
-
-      <div className="root-summary">
-        <span>case root</span>
-        <strong>{root.label}</strong>
-        <small>nanoGPT · model.py</small>
-      </div>
+      <div className="root-summary"><span>case root</span><strong>{root.label}</strong><small>nanoGPT · model.py</small></div>
     </aside>
   );
 }
