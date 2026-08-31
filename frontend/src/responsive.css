@@ -1,0 +1,160 @@
+/* Large-display layout overrides. Keep the pipe board visually dense instead of
+   leaving a 940px island in the center of 2K/4K monitors. */
+.pipe-app {
+  grid-template-columns: minmax(0, 1fr) clamp(292px, 15vw, 390px);
+}
+
+.pipe-stage {
+  padding: clamp(24px, 1.8vw, 52px) clamp(24px, 2.1vw, 64px) clamp(22px, 1.5vw, 42px);
+}
+
+.pipe-stage-header h1 {
+  font-size: clamp(27px, 1.65vw, 42px);
+}
+
+.pipe-stage-header p {
+  max-width: min(920px, 65vw);
+  font-size: clamp(13px, .72vw, 17px);
+}
+
+.pipe-viewport.canal-mode {
+  min-height: clamp(560px, 65vh, 940px);
+}
+
+.canal-board {
+  width: 100%;
+  max-width: none;
+  min-height: clamp(410px, 48vh, 760px);
+  padding-inline: clamp(20px, 2vw, 56px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.canal-row-wrap {
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.canal-row {
+  width: 100%;
+  min-height: clamp(130px, 16vh, 190px);
+  justify-content: stretch;
+}
+
+.canal-step {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.flow-pipe {
+  flex: 1 1 clamp(42px, 3.2vw, 118px);
+  width: auto;
+  min-width: 36px;
+  max-width: 150px;
+}
+
+.canal-mode .pipe-component {
+  flex: 0 0 clamp(132px, 8.2vw, 196px);
+  width: clamp(132px, 8.2vw, 196px);
+  min-height: clamp(100px, 7.1vw, 145px);
+  padding: clamp(14px, .9vw, 20px) clamp(10px, .7vw, 16px);
+}
+
+.canal-mode .pipe-component strong {
+  font-size: clamp(12px, .72vw, 17px);
+}
+
+.canal-mode .component-level {
+  font-size: clamp(7px, .42vw, 10px);
+}
+
+.canal-terminal {
+  flex-basis: clamp(68px, 4.2vw, 96px);
+  width: clamp(68px, 4.2vw, 96px);
+  height: clamp(58px, 4vw, 84px);
+}
+
+.canal-terminal strong {
+  font-size: clamp(8px, .45vw, 11px);
+}
+
+.layout-density {
+  border: 1px solid #d6dee5;
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: var(--pipe-muted);
+  background: rgba(246,249,251,.9);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.agent-replay {
+  min-height: clamp(88px, 8vh, 126px);
+}
+
+.pipe-inspector {
+  padding: clamp(28px, 1.7vw, 48px) clamp(22px, 1.45vw, 38px);
+}
+
+@media (min-width: 1700px) {
+  .flow-toolbar {
+    left: 24px;
+    right: 24px;
+    padding: 12px 15px;
+  }
+
+  .pipe-legend.canal-legend {
+    margin-bottom: 20px;
+  }
+
+  .agent-track button {
+    flex-basis: clamp(108px, 6vw, 150px);
+  }
+}
+
+@media (min-width: 2300px) {
+  .pipe-app {
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 14vw, 460px);
+  }
+
+  .pipe-stage {
+    padding-left: clamp(54px, 2.8vw, 96px);
+    padding-right: clamp(54px, 2.8vw, 96px);
+  }
+
+  .canal-board {
+    padding-inline: clamp(52px, 3vw, 110px);
+  }
+
+  .flow-pipe {
+    max-width: 190px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .canal-row-wrap {
+    min-width: 740px;
+  }
+  .canal-board {
+    display: block;
+    min-height: initial;
+  }
+  .canal-step {
+    flex: 0 0 auto;
+  }
+  .flow-pipe {
+    flex: 0 0 38px;
+    width: 38px;
+  }
+  .canal-mode .pipe-component {
+    flex-basis: 122px;
+    width: 122px;
+  }
+}
