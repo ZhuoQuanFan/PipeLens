@@ -14,8 +14,8 @@ import "./flow.css";
 import "./responsive.css";
 
 function App() {
-  const [focusId, setFocusId] = useState(nanoGptCase.id);
-  const [selectedId, setSelectedId] = useState("transformer-stack");
+  const [focusId, setFocusId] = useState("transformer-stack");
+  const [selectedId, setSelectedId] = useState("block-0");
   const [activeAgentStep, setActiveAgentStep] = useState(0);
 
   const focus = useMemo(
