@@ -10,6 +10,7 @@ import {
 } from "./cases/nanogpt";
 import { PipeCanvas, PipeInspector } from "./views/PipeCanvas";
 import "./pipe.css";
+import "./flow.css";
 
 function App() {
   const [focusId, setFocusId] = useState(nanoGptCase.id);
