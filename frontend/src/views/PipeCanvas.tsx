@@ -32,6 +32,8 @@ export function PipeCanvas({
 }: Props) {
   const visible = focus.children?.length ? focus.children : [focus];
   const rows = useMemo(() => chunkIndexed(visible, ITEMS_PER_ROW), [visible]);
+  const faultIndex = useMemo(() => visible.findIndex((node) => node.status === "fault"), [visible]);
+  const stopIndex = faultIndex >= 0 ? faultIndex : visible.length;
   const [flowIndex, setFlowIndex] = useState(-1);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -44,23 +46,36 @@ export function PipeCanvas({
   useEffect(() => {
     if (!playing) return;
     const interval = window.setInterval(() => {
-      setFlowIndex((current) => {
-        if (current >= visible.length) {
-          setPlaying(false);
-          return current;
-        }
-        return current + 1;
-      });
+      setFlowIndex((current) => Math.min(current + 1, stopIndex));
     }, Math.max(180, 900 / speed));
     return () => window.clearInterval(interval);
-  }, [playing, speed, visible.length]);
+  }, [playing, speed, stopIndex]);
 
+  useEffect(() => {
+    if (flowIndex >= stopIndex && playing) setPlaying(false);
+  }, [flowIndex, playing, stopIndex]);
+
+  const faultBlocked = faultIndex >= 0 && flowIndex >= faultIndex;
   const activeNode = flowIndex >= 0 && flowIndex < visible.length ? visible[flowIndex] : undefined;
-  const currentLabel = flowIndex < 0 ? "source" : flowIndex >= visible.length ? "output" : activeNode?.label ?? "flow";
+  const currentLabel = flowIndex < 0
+    ? "source"
+    : faultBlocked
+      ? `BLOCKED · ${visible[faultIndex]?.label ?? "fault"}`
+      : flowIndex >= visible.length
+        ? "output"
+        : activeNode?.label ?? "flow";
 
   function restartFlow() {
     setFlowIndex(-1);
     setPlaying(true);
+  }
+
+  function toggleFlow() {
+    if (faultBlocked) {
+      restartFlow();
+      return;
+    }
+    setPlaying((value) => !value);
   }
 
   return (
@@ -70,11 +85,11 @@ export function PipeCanvas({
           <div className="case-kicker">FAMOUS CODE CASE · karpathy/nanoGPT</div>
           <h1>Watch code flow through an expandable pipe network</h1>
           <p>
-            Inspired by classic Nokia Canal Control: execution enters from the source and fills the
-            code pipe piece by piece. Healthy flow is blue; the fault-propagation path turns red.
+            Execution fills the code pipe piece by piece. Healthy execution is blue. When execution
+            reaches the first failing component, the pipe blocks there and downstream components remain unfilled.
           </p>
         </div>
-        <div className="case-badge">fault-injected replay · original nanoGPT is not modified</div>
+        <div className="case-badge">hard-stop fault replay · original nanoGPT is not modified</div>
       </header>
 
       <nav className="pipe-breadcrumbs" aria-label="Semantic hierarchy">
@@ -89,12 +104,12 @@ export function PipeCanvas({
 
       <div className="pipe-viewport canal-mode">
         <div className="flow-toolbar">
-          <div className="flow-live">
-            <i className={playing ? "live-dot running" : "live-dot"} />
-            <div><span>CODE FLOW</span><strong>{currentLabel}</strong></div>
+          <div className={`flow-live ${faultBlocked ? "blocked" : ""}`}>
+            <i className={faultBlocked ? "live-dot blocked" : playing ? "live-dot running" : "live-dot"} />
+            <div><span>{faultBlocked ? "FLOW BLOCKED" : "CODE FLOW"}</span><strong>{currentLabel}</strong></div>
           </div>
           <div className="flow-controls">
-            <button type="button" onClick={() => setPlaying((value) => !value)}>{playing ? "Pause" : "Play"}</button>
+            <button type="button" onClick={toggleFlow}>{faultBlocked ? "Replay" : playing ? "Pause" : "Play"}</button>
             <button type="button" onClick={restartFlow}>Restart</button>
             <label>
               speed
@@ -110,8 +125,8 @@ export function PipeCanvas({
 
         <div className="pipe-legend canal-legend">
           <span><i className="legend-line healthy" />normal flow</span>
-          <span><i className="legend-line fault" />fault flow</span>
-          <span><i className="legend-line empty" />not executed yet</span>
+          <span><i className="legend-line fault" />fault boundary</span>
+          <span><i className="legend-line empty" />not executed</span>
           <span><i className="legend-agent" />agent inspection</span>
         </div>
 
@@ -164,8 +179,15 @@ export function PipeCanvas({
           })}
         </div>
 
+        {faultBlocked ? (
+          <div className="fault-stop-callout">
+            <strong>Execution stopped at {visible[faultIndex]?.label}</strong>
+            <span>Downstream code is not executed. Open the red component to inspect the smaller pipe network inside it.</span>
+          </div>
+        ) : null}
+
         <div className="flow-progress">
-          <span style={{ width: `${Math.max(0, Math.min(100, ((flowIndex + 1) / (visible.length + 1)) * 100))}%` }} />
+          <span className={faultBlocked ? "blocked" : ""} style={{ width: `${Math.max(0, Math.min(100, ((flowIndex + 1) / (visible.length + 1)) * 100))}%` }} />
         </div>
         <div className="drill-hint">
           <span>↳</span>
@@ -266,7 +288,7 @@ function Part({
       {node.subtitle ? <small>{node.subtitle}</small> : null}
       <div className="component-flow-window"><i /></div>
       {expandable ? <span className="component-expand">open ×{node.children?.length}</span> : <span className="component-expand leaf">source</span>}
-      {node.status === "fault" ? <span className="fault-flag">!</span> : null}
+      {node.status === "fault" && flowPhase !== "future" ? <span className="fault-flag">!</span> : null}
       {agentActive ? <span className="agent-probe">AI</span> : null}
     </button>
   );
@@ -296,7 +318,7 @@ export function PipeInspector({ node, root, onOpen }: { node: PipeNode; root: Pi
     <aside className="pipe-inspector">
       <div className="inspector-eyebrow">SELECTED PART</div>
       <h2>{node.label}</h2>
-      <div className={`inspector-state ${node.status}`}><i />{node.status === "fault" ? "fault path" : node.status === "healthy" ? "normal path" : "structural"}</div>
+      <div className={`inspector-state ${node.status}`}><i />{node.status === "fault" ? "fault boundary" : node.status === "healthy" ? "normal path" : "structural"}</div>
       <dl>
         <div><dt>semantic level</dt><dd>{node.level}</dd></div>
         <div><dt>source</dt><dd>{node.anchor?.file ?? "—"}</dd></div>
