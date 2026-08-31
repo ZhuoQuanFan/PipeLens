@@ -20,63 +20,47 @@ type Props = {
   onOpen: (node: PipeNode) => void;
 };
 
-type RuntimeState = {
-  distance: number;
-  playing: boolean;
-  speed: number;
-  follow: boolean;
-  blocked: boolean;
-};
+type Runtime = { distance: number; playing: boolean; speed: number; follow: boolean; blocked: boolean };
 
-const BLUE = 0x36a6ff;
+const BLUE = 0x35a7ff;
 const BLUE_DARK = 0x1767ca;
 const RED = 0xf05252;
 const PURPLE = 0x8b5cf6;
 const COPPER = 0xb97942;
 const COPPER_DARK = 0x68472f;
 const PIPE_INNER = 0x273947;
-const PANEL = 0xf8fbfd;
-const INK = 0x162330;
-const MUTED = 0x72808c;
 const BASE_FLOW_SPEED = 190;
 
-export function PipeWorld({
-  focus,
-  selectedId,
-  agentSteps,
-  activeAgentStep,
-  onSelect,
-  onOpen,
-}: Props) {
+export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSelect, onOpen }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const selectedRef = useRef(selectedId);
-  const activeAgentNodeRef = useRef(agentSteps[activeAgentStep]?.nodeId);
-  const runtimeRef = useRef<RuntimeState>({ distance: 0, playing: true, speed: 1, follow: true, blocked: false });
+  const agentNodeRef = useRef(agentSteps[activeAgentStep]?.nodeId);
+  const runtimeRef = useRef<Runtime>({ distance: 0, playing: true, speed: 1, follow: true, blocked: false });
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [follow, setFollow] = useState(true);
   const [blockedLabel, setBlockedLabel] = useState<string | null>(null);
 
   selectedRef.current = selectedId;
-  activeAgentNodeRef.current = agentSteps[activeAgentStep]?.nodeId;
+  agentNodeRef.current = agentSteps[activeAgentStep]?.nodeId;
   runtimeRef.current.playing = playing;
   runtimeRef.current.speed = speed;
   runtimeRef.current.follow = follow;
 
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
+    const hostElement = hostRef.current;
+    if (!hostElement) return;
 
     let disposed = false;
     let app: Application | null = null;
     const timeoutIds: number[] = [];
 
-    async function mountWorld() {
+    async function initialize() {
       const visible = focus.children?.length ? focus.children : [focus];
       const layout = layoutPipeWorld(visible);
       const pixi = new Application();
       await pixi.init({
-        resizeTo: host,
+        resizeTo: hostElement,
         antialias: true,
         backgroundAlpha: 0,
         autoDensity: true,
@@ -86,91 +70,74 @@ export function PipeWorld({
         pixi.destroy(true);
         return;
       }
+
       app = pixi;
       pixi.canvas.className = "pipe-world-canvas";
-      host.appendChild(pixi.canvas);
+      hostElement.appendChild(pixi.canvas);
 
-      const scene = new Container();
       const camera = new Container();
-      scene.addChild(camera);
-      pixi.stage.addChild(scene);
+      pixi.stage.addChild(camera);
+      drawGrid(camera, layout);
+      drawPipe(camera, layout.path);
 
-      drawWorldGrid(camera, layout);
-      drawPipeNetwork(camera, layout.path);
-
-      const flowGraphics = new Graphics();
-      camera.addChild(flowGraphics);
-
-      const nodeContainers = new Map<string, Container>();
-      const channelFills = new Map<string, Graphics>();
+      const flow = new Graphics();
+      camera.addChild(flow);
+      const fills = new Map<string, Graphics>();
       layout.nodes.forEach((worldNode) => {
-        const { container, channelFill } = createComponent(worldNode, () => {
+        const { container, fill } = createComponent(worldNode, () => {
           onSelect(worldNode.node);
-          focusCameraOnNode(camera, pixi, worldNode, 1.12);
+          focusCamera(camera, pixi, worldNode);
           if (worldNode.node.children?.length) {
-            const timeout = window.setTimeout(() => onOpen(worldNode.node), 360);
-            timeoutIds.push(timeout);
+            timeoutIds.push(window.setTimeout(() => onOpen(worldNode.node), 320));
           }
         });
-        nodeContainers.set(worldNode.node.id, container);
-        channelFills.set(worldNode.node.id, channelFill);
+        fills.set(worldNode.node.id, fill);
         camera.addChild(container);
       });
 
-      const selectedHalo = new Graphics();
-      camera.addChild(selectedHalo);
+      const selection = new Graphics();
+      camera.addChild(selection);
       const agentProbe = createAgentProbe();
       camera.addChild(agentProbe);
-
-      const particles = createFlowParticles(20);
+      const particles = createParticles(18);
       particles.forEach((particle) => camera.addChild(particle));
-      const impact = createImpactEffect();
-      camera.addChild(impact.container);
+      const impact = createImpact();
+      camera.addChild(impact);
 
       const metrics = pathMetrics(layout.path);
-      const faultStopDistance = computeFaultStopDistance(layout);
-      const maxDistance = faultStopDistance ?? metrics.totalLength;
+      const faultDistance = computeFaultDistance(layout);
+      const endDistance = faultDistance ?? metrics.totalLength;
       runtimeRef.current = { distance: 0, playing: true, speed, follow: true, blocked: false };
       setPlaying(true);
       setFollow(true);
       setBlockedLabel(null);
-
       fitCamera(camera, pixi, layout);
 
       let dragging = false;
       let lastPointer = { x: 0, y: 0 };
       const canvas = pixi.canvas;
-
       const onWheel = (event: WheelEvent) => {
         event.preventDefault();
-        setFollow(false);
-        runtimeRef.current.follow = false;
-        const nextScale = clamp(camera.scale.x * (event.deltaY > 0 ? 0.9 : 1.1), 0.35, 2.15);
+        const next = clamp(camera.scale.x * (event.deltaY > 0 ? 0.9 : 1.1), 0.35, 2.2);
         const rect = canvas.getBoundingClientRect();
-        const pointerX = event.clientX - rect.left;
-        const pointerY = event.clientY - rect.top;
-        const worldBefore = {
-          x: (pointerX - camera.x) / camera.scale.x,
-          y: (pointerY - camera.y) / camera.scale.y,
-        };
-        camera.scale.set(nextScale);
-        camera.x = pointerX - worldBefore.x * nextScale;
-        camera.y = pointerY - worldBefore.y * nextScale;
+        const pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const world = { x: (pointer.x - camera.x) / camera.scale.x, y: (pointer.y - camera.y) / camera.scale.y };
+        camera.scale.set(next);
+        camera.position.set(pointer.x - world.x * next, pointer.y - world.y * next);
+        runtimeRef.current.follow = false;
+        setFollow(false);
       };
       const onPointerDown = (event: PointerEvent) => {
         dragging = true;
         lastPointer = { x: event.clientX, y: event.clientY };
-        canvas.setPointerCapture?.(event.pointerId);
       };
       const onPointerMove = (event: PointerEvent) => {
         if (!dragging) return;
-        const dx = event.clientX - lastPointer.x;
-        const dy = event.clientY - lastPointer.y;
+        camera.x += event.clientX - lastPointer.x;
+        camera.y += event.clientY - lastPointer.y;
         lastPointer = { x: event.clientX, y: event.clientY };
-        camera.x += dx;
-        camera.y += dy;
-        setFollow(false);
         runtimeRef.current.follow = false;
+        setFollow(false);
       };
       const onPointerUp = () => { dragging = false; };
       canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -181,50 +148,43 @@ export function PipeWorld({
 
       pixi.ticker.add((ticker) => {
         const runtime = runtimeRef.current;
-        const deltaSeconds = ticker.deltaMS / 1000;
         if (runtime.playing && !runtime.blocked) {
-          runtime.distance = Math.min(maxDistance, runtime.distance + BASE_FLOW_SPEED * runtime.speed * deltaSeconds);
-          if (runtime.distance >= maxDistance - 0.5) {
-            if (faultStopDistance != null) {
+          runtime.distance = Math.min(endDistance, runtime.distance + BASE_FLOW_SPEED * runtime.speed * (ticker.deltaMS / 1000));
+          if (runtime.distance >= endDistance - 0.5) {
+            runtime.playing = false;
+            setPlaying(false);
+            if (faultDistance != null) {
               runtime.blocked = true;
-              runtime.playing = false;
-              setPlaying(false);
               const faultNode = layout.nodes[layout.faultIndex];
               setBlockedLabel(faultNode?.node.label ?? "fault");
-              if (faultNode) impact.trigger(faultNode.x + faultNode.width / 2, faultNode.y + faultNode.height / 2);
-            } else {
-              runtime.playing = false;
-              setPlaying(false);
+              if (faultNode) impact.position.set(faultNode.x + faultNode.width / 2, faultNode.y + faultNode.height / 2);
             }
           }
         }
 
-        redrawFlow(flowGraphics, layout.path, runtime.distance);
-        updateParticles(particles, layout.path, runtime.distance, metrics.totalLength, runtime.blocked);
-        updateComponentChannels(channelFills, layout, runtime.distance);
-        updateSelectionHalo(selectedHalo, layout, selectedRef.current, ticker.lastTime / 1000);
-        updateAgentProbe(agentProbe, layout, activeAgentNodeRef.current, ticker.lastTime / 1000);
-        impact.update(deltaSeconds);
+        redrawFlow(flow, layout.path, runtime.distance);
+        updateParticles(particles, layout.path, runtime.distance, metrics.totalLength, runtime.blocked, ticker.lastTime / 1000);
+        updateFills(fills, layout, runtime.distance);
+        updateSelection(selection, layout, selectedRef.current, ticker.lastTime / 1000);
+        updateAgentProbe(agentProbe, layout, agentNodeRef.current, ticker.lastTime / 1000);
+        updateImpact(impact, runtime.blocked, ticker.lastTime / 1000);
 
         if (runtime.follow) {
           const point = pointAtDistance(layout.path, runtime.distance);
-          const desiredScale = Math.max(camera.scale.x, clamp(Math.min(pixi.screen.width / 1120, pixi.screen.height / 660), 0.72, 1.08));
+          const desiredScale = clamp(Math.max(camera.scale.x, Math.min(pixi.screen.width / 1120, pixi.screen.height / 660)), 0.7, 1.12);
           camera.scale.x += (desiredScale - camera.scale.x) * 0.035;
           camera.scale.y = camera.scale.x;
-          const targetX = pixi.screen.width * 0.48 - point.x * camera.scale.x;
-          const targetY = pixi.screen.height * 0.5 - point.y * camera.scale.y;
-          camera.x += (targetX - camera.x) * 0.055;
-          camera.y += (targetY - camera.y) * 0.055;
+          camera.x += (pixi.screen.width * 0.48 - point.x * camera.scale.x - camera.x) * 0.06;
+          camera.y += (pixi.screen.height * 0.5 - point.y * camera.scale.y - camera.y) * 0.06;
         }
       });
 
       const resizeObserver = new ResizeObserver(() => {
-        if (!runtimeRef.current.follow) return;
-        fitCamera(camera, pixi, layout);
+        if (runtimeRef.current.follow) fitCamera(camera, pixi, layout);
       });
-      resizeObserver.observe(host);
+      resizeObserver.observe(hostElement);
 
-      const cleanup = () => {
+      (pixi as Application & { __cleanup?: () => void }).__cleanup = () => {
         resizeObserver.disconnect();
         canvas.removeEventListener("wheel", onWheel);
         canvas.removeEventListener("pointerdown", onPointerDown);
@@ -232,18 +192,16 @@ export function PipeWorld({
         canvas.removeEventListener("pointerup", onPointerUp);
         canvas.removeEventListener("pointercancel", onPointerUp);
       };
-      (pixi as Application & { __pipeCleanup?: () => void }).__pipeCleanup = cleanup;
     }
 
-    void mountWorld();
-
+    void initialize();
     return () => {
       disposed = true;
       timeoutIds.forEach((id) => window.clearTimeout(id));
-      const extended = app as (Application & { __pipeCleanup?: () => void }) | null;
-      extended?.__pipeCleanup?.();
+      const extended = app as (Application & { __cleanup?: () => void }) | null;
+      extended?.__cleanup?.();
       app?.destroy(true);
-      host.innerHTML = "";
+      hostElement.innerHTML = "";
     };
   }, [focus.id, onOpen, onSelect]);
 
@@ -255,14 +213,6 @@ export function PipeWorld({
     setPlaying(true);
   }
 
-  function togglePlaying() {
-    if (runtimeRef.current.blocked) {
-      restart();
-      return;
-    }
-    setPlaying((value) => !value);
-  }
-
   return (
     <section className="game-world-shell">
       <div className="game-world-hud top-left">
@@ -270,279 +220,182 @@ export function PipeWorld({
         <strong>{blockedLabel ? `FLOW BLOCKED · ${blockedLabel}` : playing ? "EXECUTION RUNNING" : "EXECUTION PAUSED"}</strong>
       </div>
       <div className="game-world-hud controls">
-        <button type="button" onClick={togglePlaying}>{blockedLabel ? "Replay" : playing ? "Pause" : "Play"}</button>
+        <button type="button" onClick={() => blockedLabel ? restart() : setPlaying((value) => !value)}>{blockedLabel ? "Replay" : playing ? "Pause" : "Play"}</button>
         <button type="button" onClick={restart}>Restart</button>
         <button type="button" className={follow ? "active" : ""} onClick={() => setFollow((value) => !value)}>Follow</button>
-        <label>
-          <span>speed</span>
-          <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-            <option value={0.6}>0.6×</option>
-            <option value={1}>1×</option>
-            <option value={1.8}>1.8×</option>
-            <option value={3}>3×</option>
-          </select>
-        </label>
+        <label><span>speed</span><select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}><option value={0.6}>0.6×</option><option value={1}>1×</option><option value={1.8}>1.8×</option><option value={3}>3×</option></select></label>
       </div>
-      <div className="game-world-hud bottom-left">
-        <span>drag to pan</span><span>wheel to zoom</span><span>click component to enter</span>
-      </div>
+      <div className="game-world-hud bottom-left"><span>drag to pan</span><span>wheel to zoom</span><span>click component to enter</span></div>
       <div ref={hostRef} className={`pipe-world-host ${blockedLabel ? "blocked" : ""}`} />
     </section>
   );
 }
 
-function drawWorldGrid(camera: Container, layout: PipeWorldLayout) {
-  const background = new Graphics();
-  background.rect(0, 0, layout.width, layout.height).fill({ color: 0xdbe5ec });
-  for (let x = 0; x <= layout.width; x += 80) {
-    background.moveTo(x, 0).lineTo(x, layout.height).stroke({ color: 0xa9bac7, width: 1, alpha: 0.23 });
-  }
-  for (let y = 0; y <= layout.height; y += 80) {
-    background.moveTo(0, y).lineTo(layout.width, y).stroke({ color: 0xa9bac7, width: 1, alpha: 0.23 });
-  }
-  camera.addChild(background);
+function drawGrid(camera: Container, layout: PipeWorldLayout) {
+  const grid = new Graphics();
+  grid.rect(0, 0, layout.width, layout.height).fill({ color: 0xdbe5ec });
+  for (let x = 0; x <= layout.width; x += 80) grid.moveTo(x, 0).lineTo(x, layout.height).stroke({ color: 0xa9bac7, width: 1, alpha: 0.2 });
+  for (let y = 0; y <= layout.height; y += 80) grid.moveTo(0, y).lineTo(layout.width, y).stroke({ color: 0xa9bac7, width: 1, alpha: 0.2 });
+  camera.addChild(grid);
 }
 
-function drawPipeNetwork(camera: Container, path: WorldPoint[]) {
-  const outer = new Graphics();
-  drawPolyline(outer, path, { color: COPPER_DARK, width: 34, alpha: 1 });
-  drawPolyline(outer, path, { color: COPPER, width: 27, alpha: 1 });
-  drawPolyline(outer, path, { color: 0xe8b47c, width: 5, alpha: 0.65 });
-  camera.addChild(outer);
-
-  const inner = new Graphics();
-  drawPolyline(inner, path, { color: PIPE_INNER, width: 15, alpha: 1 });
-  drawPolyline(inner, path, { color: 0x425767, width: 4, alpha: 0.72 });
-  camera.addChild(inner);
+function drawPipe(camera: Container, path: WorldPoint[]) {
+  const pipe = new Graphics();
+  strokePath(pipe, path, COPPER_DARK, 34, 1);
+  strokePath(pipe, path, COPPER, 27, 1);
+  strokePath(pipe, path, 0xeab680, 6, 0.58);
+  strokePath(pipe, path, PIPE_INNER, 16, 1);
+  strokePath(pipe, path, 0x425767, 4, 0.65);
+  camera.addChild(pipe);
 }
 
 function redrawFlow(graphics: Graphics, path: WorldPoint[], distance: number) {
   graphics.clear();
   const partial = partialPath(path, distance);
   if (partial.length < 2) return;
-  drawPolyline(graphics, partial, { color: BLUE_DARK, width: 11, alpha: 0.95 });
-  drawPolyline(graphics, partial, { color: BLUE, width: 6, alpha: 1 });
+  strokePath(graphics, partial, BLUE_DARK, 11, 1);
+  strokePath(graphics, partial, BLUE, 6, 1);
 }
 
 function createComponent(worldNode: WorldNode, onOpen: () => void) {
-  const container = new Container();
-  container.x = worldNode.x;
-  container.y = worldNode.y;
+  const container = new Container({ x: worldNode.x, y: worldNode.y });
   container.eventMode = "static";
   container.cursor = "pointer";
   container.on("pointertap", onOpen);
 
-  const shadow = new Graphics();
-  shadow.roundRect(8, 10, worldNode.width, worldNode.height, 22).fill({ color: 0x253746, alpha: 0.16 });
-  container.addChild(shadow);
+  const shadow = new Graphics().roundRect(8, 10, worldNode.width, worldNode.height, 22).fill({ color: 0x253746, alpha: 0.16 });
+  const body = new Graphics().roundRect(0, 0, worldNode.width, worldNode.height, 22).fill({ color: 0xf8fbfd });
+  body.roundRect(0, 0, worldNode.width, worldNode.height, 22).stroke({ color: worldNode.node.status === "fault" ? RED : 0x9babb8, width: worldNode.node.status === "fault" ? 4 : 2 });
+  body.roundRect(9, 9, worldNode.width - 18, 17, 9).fill({ color: worldNode.node.status === "fault" ? 0xffe4e4 : 0xe7eef3 });
+  container.addChild(shadow, body);
 
-  const body = new Graphics();
-  body.roundRect(0, 0, worldNode.width, worldNode.height, 22).fill({ color: PANEL });
-  body.roundRect(0, 0, worldNode.width, worldNode.height, 22).stroke({
-    color: worldNode.node.status === "fault" ? RED : 0x9babb8,
-    width: worldNode.node.status === "fault" ? 4 : 2,
-  });
-  body.roundRect(8, 8, worldNode.width - 16, 18, 9).fill({ color: worldNode.node.status === "fault" ? 0xffe4e4 : 0xe7eef3 });
-  container.addChild(body);
-
-  const bolts = [[14, 14], [worldNode.width - 14, 14], [14, worldNode.height - 14], [worldNode.width - 14, worldNode.height - 14]];
-  bolts.forEach(([x, y]) => {
-    const bolt = new Graphics();
-    bolt.circle(x, y, 4).fill({ color: 0x8998a4 });
-    bolt.circle(x - 1, y - 1, 1.5).fill({ color: 0xffffff, alpha: 0.8 });
-    container.addChild(bolt);
-  });
-
-  const level = new Text({ text: worldNode.node.level.toUpperCase(), style: { fontFamily: "Inter, Arial", fontSize: 10, fontWeight: "700", fill: MUTED, letterSpacing: 1.2 } });
-  level.x = 18;
-  level.y = 12;
-  container.addChild(level);
-
-  const title = new Text({
-    text: worldNode.node.label,
-    style: { fontFamily: "Inter, Arial", fontSize: 16, fontWeight: "700", fill: INK, align: "center", wordWrap: true, wordWrapWidth: worldNode.width - 30 },
-  });
+  const level = new Text({ text: worldNode.node.level.toUpperCase(), style: { fontFamily: "Inter, Arial", fontSize: 10, fontWeight: "700", fill: 0x72808c, letterSpacing: 1.1 } });
+  level.position.set(18, 12);
+  const title = new Text({ text: worldNode.node.label, style: { fontFamily: "Inter, Arial", fontSize: 16, fontWeight: "700", fill: 0x162330, align: "center", wordWrap: true, wordWrapWidth: worldNode.width - 30 } });
   title.anchor.set(0.5, 0);
-  title.x = worldNode.width / 2;
-  title.y = 37;
-  container.addChild(title);
+  title.position.set(worldNode.width / 2, 38);
+  container.addChild(level, title);
 
-  const channel = new Graphics();
-  channel.roundRect(24, worldNode.height - 31, worldNode.width - 48, 12, 6).fill({ color: PIPE_INNER });
-  channel.roundRect(24, worldNode.height - 31, worldNode.width - 48, 12, 6).stroke({ color: 0x8c9ba6, width: 1 });
-  container.addChild(channel);
-
-  const channelFill = new Graphics();
-  channelFill.roundRect(27, worldNode.height - 28, worldNode.width - 54, 6, 3).fill({ color: BLUE });
-  channelFill.scale.x = 0;
-  container.addChild(channelFill);
+  const channel = new Graphics().roundRect(24, worldNode.height - 29, worldNode.width - 48, 12, 6).fill({ color: PIPE_INNER });
+  const fill = new Graphics().roundRect(27, worldNode.height - 26, worldNode.width - 54, 6, 3).fill({ color: BLUE });
+  fill.scale.x = 0;
+  container.addChild(channel, fill);
 
   if (worldNode.node.children?.length) {
     const open = new Text({ text: `ENTER ×${worldNode.node.children.length}`, style: { fontFamily: "Inter, Arial", fontSize: 9, fontWeight: "700", fill: BLUE_DARK } });
     open.anchor.set(0.5, 1);
-    open.x = worldNode.width / 2;
-    open.y = worldNode.height - 37;
+    open.position.set(worldNode.width / 2, worldNode.height - 36);
     container.addChild(open);
   }
-
   if (worldNode.node.status === "fault") {
-    const warning = new Graphics();
-    warning.circle(worldNode.width - 8, 8, 15).fill({ color: RED });
-    warning.circle(worldNode.width - 8, 8, 15).stroke({ color: 0xffffff, width: 4 });
-    container.addChild(warning);
+    const badge = new Graphics().circle(worldNode.width - 8, 8, 15).fill({ color: RED });
+    badge.circle(worldNode.width - 8, 8, 15).stroke({ color: 0xffffff, width: 4 });
     const mark = new Text({ text: "!", style: { fontFamily: "Arial", fontSize: 18, fontWeight: "900", fill: 0xffffff } });
     mark.anchor.set(0.5);
-    mark.x = worldNode.width - 8;
-    mark.y = 8;
-    container.addChild(mark);
+    mark.position.set(worldNode.width - 8, 8);
+    container.addChild(badge, mark);
   }
-
-  return { container, channelFill };
+  return { container, fill };
 }
 
-function createFlowParticles(count: number): Graphics[] {
-  return Array.from({ length: count }, (_, index) => {
-    const particle = new Graphics();
-    const radius = 3 + (index % 4) * 0.55;
-    particle.circle(0, 0, radius).fill({ color: index % 3 === 0 ? 0xb9e6ff : BLUE, alpha: 0.55 + (index % 5) * 0.08 });
-    particle.visible = false;
-    return particle;
-  });
+function createParticles(count: number) {
+  return Array.from({ length: count }, (_, index) => new Graphics().circle(0, 0, 3 + (index % 3) * 0.6).fill({ color: index % 4 === 0 ? 0xb9e6ff : BLUE, alpha: 0.6 }));
 }
 
-function updateParticles(particles: Graphics[], path: WorldPoint[], headDistance: number, totalLength: number, blocked: boolean) {
+function updateParticles(particles: Graphics[], path: WorldPoint[], head: number, total: number, blocked: boolean, time: number) {
   particles.forEach((particle, index) => {
-    const trailingDistance = headDistance - index * 20;
-    if (trailingDistance < 0 || trailingDistance > totalLength) {
-      particle.visible = false;
-      return;
-    }
-    particle.visible = true;
-    const point = pointAtDistance(path, trailingDistance);
+    const distance = head - index * 20;
+    particle.visible = distance >= 0 && distance <= total;
+    if (!particle.visible) return;
+    const point = pointAtDistance(path, distance);
     particle.position.set(point.x, point.y);
-    particle.alpha = blocked ? 0.3 + (index % 3) * 0.12 : 0.55 + (index % 4) * 0.1;
+    particle.scale.set(blocked ? 0.7 + Math.sin(time * 5 + index) * 0.08 : 1);
+    particle.alpha = blocked ? 0.32 : 0.58 + (index % 4) * 0.1;
   });
 }
 
-function updateComponentChannels(fills: Map<string, Graphics>, layout: PipeWorldLayout, distance: number) {
+function updateFills(fills: Map<string, Graphics>, layout: PipeWorldLayout, distance: number) {
   layout.nodes.forEach((worldNode) => {
     const fill = fills.get(worldNode.node.id);
     if (!fill) return;
-    const centerDistance = distanceAlongPathToPoint(layout.path, {
-      x: worldNode.x + worldNode.width / 2,
-      y: worldNode.y + worldNode.height / 2,
-    });
-    const localProgress = clamp((distance - centerDistance + 70) / 140, 0, 1);
-    fill.scale.x = localProgress;
-    fill.tint = worldNode.node.status === "fault" && localProgress > 0.45 ? RED : BLUE;
+    const center = distanceTo(layout.path, { x: worldNode.x + worldNode.width / 2, y: worldNode.y + worldNode.height / 2 });
+    const progress = clamp((distance - center + 65) / 130, 0, 1);
+    fill.scale.x = progress;
+    fill.tint = worldNode.node.status === "fault" && progress > 0.45 ? RED : BLUE;
   });
 }
 
-function updateSelectionHalo(graphics: Graphics, layout: PipeWorldLayout, selectedId: string, time: number) {
+function updateSelection(graphics: Graphics, layout: PipeWorldLayout, selectedId: string, time: number) {
   graphics.clear();
-  const selected = layout.nodes.find((item) => item.node.id === selectedId);
-  if (!selected) return;
-  const pulse = 5 + Math.sin(time * 3.5) * 2;
-  graphics.roundRect(selected.x - pulse, selected.y - pulse, selected.width + pulse * 2, selected.height + pulse * 2, 27)
-    .stroke({ color: PURPLE, width: 3, alpha: 0.55 });
+  const node = layout.nodes.find((item) => item.node.id === selectedId);
+  if (!node) return;
+  const pad = 6 + Math.sin(time * 3.5) * 2;
+  graphics.roundRect(node.x - pad, node.y - pad, node.width + pad * 2, node.height + pad * 2, 28).stroke({ color: PURPLE, width: 3, alpha: 0.55 });
 }
 
 function createAgentProbe() {
   const probe = new Container();
-  const ring = new Graphics();
-  ring.circle(0, 0, 18).stroke({ color: PURPLE, width: 4, alpha: 0.95 });
-  ring.circle(0, 0, 7).fill({ color: PURPLE, alpha: 0.95 });
-  probe.addChild(ring);
-  const label = new Text({ text: "AI", style: { fontFamily: "Inter, Arial", fontSize: 10, fontWeight: "900", fill: 0xffffff } });
+  const ring = new Graphics().circle(0, 0, 18).stroke({ color: PURPLE, width: 4 }).circle(0, 0, 7).fill({ color: PURPLE });
+  const label = new Text({ text: "AI", style: { fontFamily: "Inter, Arial", fontSize: 9, fontWeight: "900", fill: 0xffffff } });
   label.anchor.set(0.5);
-  probe.addChild(label);
+  probe.addChild(ring, label);
   probe.visible = false;
   return probe;
 }
 
 function updateAgentProbe(probe: Container, layout: PipeWorldLayout, nodeId: string | undefined, time: number) {
   const target = nodeId ? layout.nodes.find((item) => item.node.id === nodeId) : undefined;
-  if (!target) {
-    probe.visible = false;
-    return;
+  probe.visible = Boolean(target);
+  if (!target) return;
+  probe.position.set(target.x + target.width - 5, target.y - 18 + Math.sin(time * 4) * 5);
+}
+
+function createImpact() {
+  const impact = new Graphics();
+  impact.visible = false;
+  return impact;
+}
+
+function updateImpact(impact: Graphics, blocked: boolean, time: number) {
+  impact.visible = blocked;
+  impact.clear();
+  if (!blocked) return;
+  const pulse = 28 + Math.sin(time * 7) * 8;
+  impact.circle(0, 0, pulse).stroke({ color: RED, width: 7, alpha: 0.55 });
+  for (let index = 0; index < 10; index += 1) {
+    const angle = (Math.PI * 2 * index) / 10 + time * (index % 2 ? 0.6 : -0.6);
+    const radius = 34 + (index % 3) * 12;
+    impact.circle(Math.cos(angle) * radius, Math.sin(angle) * radius, 3).fill({ color: RED, alpha: 0.75 });
   }
-  probe.visible = true;
-  probe.x = target.x + target.width - 5;
-  probe.y = target.y - 18 + Math.sin(time * 4) * 5;
 }
 
-function createImpactEffect() {
-  const container = new Container();
-  const ring = new Graphics();
-  const sparks = Array.from({ length: 12 }, (_, index) => {
-    const spark = new Graphics();
-    spark.circle(0, 0, 4 - (index % 2)).fill({ color: index % 3 === 0 ? 0xffb0a8 : RED });
-    container.addChild(spark);
-    return spark;
-  });
-  container.addChild(ring);
-  container.visible = false;
-  let age = 0;
-  let active = false;
-
-  return {
-    container,
-    trigger(x: number, y: number) {
-      container.position.set(x, y);
-      container.visible = true;
-      active = true;
-      age = 0;
-    },
-    update(delta: number) {
-      if (!active) return;
-      age += delta;
-      ring.clear();
-      const radius = 24 + Math.sin(age * 7) * 7;
-      ring.circle(0, 0, radius).stroke({ color: RED, width: 6, alpha: 0.35 + Math.abs(Math.sin(age * 5)) * 0.4 });
-      sparks.forEach((spark, index) => {
-        const angle = (Math.PI * 2 * index) / sparks.length + age * (index % 2 ? 0.8 : -0.65);
-        const distance = 24 + ((index * 11) % 30) + Math.sin(age * 8 + index) * 8;
-        spark.position.set(Math.cos(angle) * distance, Math.sin(angle) * distance);
-        spark.alpha = 0.45 + Math.abs(Math.sin(age * 6 + index)) * 0.5;
-      });
-    },
-  };
-}
-
-function computeFaultStopDistance(layout: PipeWorldLayout): number | null {
+function computeFaultDistance(layout: PipeWorldLayout) {
   if (layout.faultIndex < 0) return null;
   const fault = layout.nodes[layout.faultIndex];
-  return distanceAlongPathToPoint(layout.path, {
-    x: fault.x + fault.width / 2,
-    y: fault.y + fault.height / 2,
-  });
+  return distanceTo(layout.path, { x: fault.x + fault.width / 2, y: fault.y + fault.height / 2 });
 }
 
-function distanceAlongPathToPoint(path: WorldPoint[], target: WorldPoint): number {
+function distanceTo(path: WorldPoint[], target: WorldPoint) {
   let distance = 0;
   for (let index = 1; index < path.length; index += 1) {
     const start = path[index - 1];
     const end = path[index];
-    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
-    if (Math.abs(end.x - target.x) < 0.5 && Math.abs(end.y - target.y) < 0.5) return distance + segmentLength;
-    distance += segmentLength;
+    const segment = Math.hypot(end.x - start.x, end.y - start.y);
+    if (Math.abs(end.x - target.x) < 0.5 && Math.abs(end.y - target.y) < 0.5) return distance + segment;
+    distance += segment;
   }
   return distance;
 }
 
-function partialPath(path: WorldPoint[], distance: number): WorldPoint[] {
+function partialPath(path: WorldPoint[], distance: number) {
   if (!path.length) return [];
-  const result = [path[0]];
+  const result: WorldPoint[] = [path[0]];
   let remaining = Math.max(0, distance);
   for (let index = 1; index < path.length; index += 1) {
     const start = path[index - 1];
     const end = path[index];
     const length = Math.hypot(end.x - start.x, end.y - start.y);
-    if (remaining >= length) {
-      result.push(end);
-      remaining -= length;
-      continue;
-    }
+    if (remaining >= length) { result.push(end); remaining -= length; continue; }
     if (remaining > 0) {
       const ratio = length === 0 ? 0 : remaining / length;
       result.push({ x: start.x + (end.x - start.x) * ratio, y: start.y + (end.y - start.y) * ratio });
@@ -552,27 +405,23 @@ function partialPath(path: WorldPoint[], distance: number): WorldPoint[] {
   return result;
 }
 
-function drawPolyline(graphics: Graphics, path: WorldPoint[], style: { color: number; width: number; alpha: number }) {
+function strokePath(graphics: Graphics, path: WorldPoint[], color: number, width: number, alpha: number) {
   if (path.length < 2) return;
   graphics.moveTo(path[0].x, path[0].y);
   for (let index = 1; index < path.length; index += 1) graphics.lineTo(path[index].x, path[index].y);
-  graphics.stroke({ color: style.color, width: style.width, alpha: style.alpha, cap: "round", join: "round" });
+  graphics.stroke({ color, width, alpha, cap: "round", join: "round" });
 }
 
 function fitCamera(camera: Container, app: Application, layout: PipeWorldLayout) {
   const scale = clamp(Math.min(app.screen.width / layout.width, app.screen.height / layout.height) * 0.93, 0.42, 1.25);
   camera.scale.set(scale);
-  camera.x = (app.screen.width - layout.width * scale) / 2;
-  camera.y = (app.screen.height - layout.height * scale) / 2;
+  camera.position.set((app.screen.width - layout.width * scale) / 2, (app.screen.height - layout.height * scale) / 2);
 }
 
-function focusCameraOnNode(camera: Container, app: Application, node: WorldNode, targetScale: number) {
-  const scale = clamp(Math.max(camera.scale.x, targetScale), 0.5, 1.8);
+function focusCamera(camera: Container, app: Application, node: WorldNode) {
+  const scale = clamp(Math.max(camera.scale.x, 1.12), 0.5, 1.8);
   camera.scale.set(scale);
-  camera.x = app.screen.width / 2 - (node.x + node.width / 2) * scale;
-  camera.y = app.screen.height / 2 - (node.y + node.height / 2) * scale;
+  camera.position.set(app.screen.width / 2 - (node.x + node.width / 2) * scale, app.screen.height / 2 - (node.y + node.height / 2) * scale);
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
