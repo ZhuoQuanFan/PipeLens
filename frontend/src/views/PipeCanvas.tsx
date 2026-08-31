@@ -17,8 +17,6 @@ type Props = {
 type FlowPhase = "future" | "active" | "passed";
 type IndexedNode = { node: PipeNode; index: number };
 
-const ITEMS_PER_ROW = 4;
-
 export function PipeCanvas({
   root,
   focus,
@@ -31,7 +29,12 @@ export function PipeCanvas({
   onAgentStep,
 }: Props) {
   const visible = focus.children?.length ? focus.children : [focus];
-  const rows = useMemo(() => chunkIndexed(visible, ITEMS_PER_ROW), [visible]);
+  const viewportWidth = useViewportWidth();
+  const itemsPerRow = useMemo(
+    () => chooseItemsPerRow(viewportWidth, visible.length),
+    [viewportWidth, visible.length],
+  );
+  const rows = useMemo(() => chunkIndexed(visible, itemsPerRow), [visible, itemsPerRow]);
   const faultIndex = useMemo(() => visible.findIndex((node) => node.status === "fault"), [visible]);
   const stopIndex = faultIndex >= 0 ? faultIndex : visible.length;
   const [flowIndex, setFlowIndex] = useState(-1);
@@ -109,6 +112,7 @@ export function PipeCanvas({
             <div><span>{faultBlocked ? "FLOW BLOCKED" : "CODE FLOW"}</span><strong>{currentLabel}</strong></div>
           </div>
           <div className="flow-controls">
+            <span className="layout-density">{itemsPerRow}/row</span>
             <button type="button" onClick={toggleFlow}>{faultBlocked ? "Replay" : playing ? "Pause" : "Play"}</button>
             <button type="button" onClick={restartFlow}>Restart</button>
             <label>
@@ -130,7 +134,7 @@ export function PipeCanvas({
           <span><i className="legend-agent" />agent inspection</span>
         </div>
 
-        <div className="canal-board">
+        <div className={`canal-board rows-${rows.length}`}>
           {rows.map((row, rowIndex) => {
             const reverse = rowIndex % 2 === 1;
             const lastRow = rowIndex === rows.length - 1;
@@ -200,6 +204,39 @@ export function PipeCanvas({
       <AgentReplay steps={agentSteps} active={activeAgentStep} onStep={onAgentStep} />
     </section>
   );
+}
+
+function useViewportWidth() {
+  const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
+
+  useEffect(() => {
+    let frame = 0;
+    const handleResize = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => setWidth(window.innerWidth));
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  return width;
+}
+
+function chooseItemsPerRow(width: number, nodeCount: number) {
+  let capacity = 4;
+  if (width >= 3000) capacity = 8;
+  else if (width >= 2300) capacity = 7;
+  else if (width >= 1700) capacity = 6;
+  else if (width >= 1380) capacity = 5;
+  else if (width < 1050) capacity = 3;
+
+  capacity = Math.max(1, Math.min(capacity, nodeCount));
+  if (nodeCount === 12 && capacity >= 6) return 6;
+  if (nodeCount > capacity && nodeCount % capacity === 1 && capacity > 3) return capacity - 1;
+  return capacity;
 }
 
 function chunkIndexed(nodes: PipeNode[], size: number): IndexedNode[][] {
