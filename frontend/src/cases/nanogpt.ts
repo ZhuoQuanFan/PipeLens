@@ -10,6 +10,15 @@ export type PipePiece =
   | "loop"
   | "blocked";
 
+export type PipeEdgeKind = "sequence" | "bypass" | "branch";
+
+export type PipeEdge = {
+  id: string;
+  from: string | "$input";
+  to: string | "$output";
+  kind: PipeEdgeKind;
+};
+
 export type CodeAnchor = {
   file: string;
   symbol?: string;
@@ -26,6 +35,7 @@ export type PipeNode = {
   piece?: PipePiece;
   anchor?: CodeAnchor;
   children?: PipeNode[];
+  edges?: PipeEdge[];
 };
 
 export type ScriptedAgentStep = {
@@ -54,6 +64,17 @@ const faultBlock: PipeNode = {
   status: "fault",
   piece: "machine",
   anchor: { file: "model.py", symbol: "Block.forward", source: "x = x + self.attn(self.ln_1(x))" },
+  edges: [
+    { id: "block-input-ln1", from: "$input", to: "ln1", kind: "sequence" },
+    { id: "ln1-attention", from: "ln1", to: "attention", kind: "sequence" },
+    { id: "attention-residual-1", from: "attention", to: "residual-1", kind: "sequence" },
+    { id: "residual-bypass-1", from: "$input", to: "residual-1", kind: "bypass" },
+    { id: "residual-1-ln2", from: "residual-1", to: "ln2", kind: "sequence" },
+    { id: "ln2-mlp", from: "ln2", to: "mlp", kind: "sequence" },
+    { id: "mlp-residual-2", from: "mlp", to: "residual-2", kind: "sequence" },
+    { id: "residual-bypass-2", from: "residual-1", to: "residual-2", kind: "bypass" },
+    { id: "residual-2-output", from: "residual-2", to: "$output", kind: "sequence" },
+  ],
   children: [
     { id: "ln1", label: "LayerNorm 1", level: "logic", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward" } },
     {
@@ -92,10 +113,10 @@ const faultBlock: PipeNode = {
         { id: "output-proj", label: "Output projection", level: "function", status: "neutral", piece: "valve", anchor: { file: "model.py", source: "self.resid_dropout(self.c_proj(y))" } },
       ],
     },
-    { id: "residual-1", label: "Residual add", level: "dataflow", status: "neutral", piece: "bypass", anchor: { file: "model.py", source: "x = x + self.attn(self.ln_1(x))" } },
+    { id: "residual-1", label: "Residual merge", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", source: "x = x + self.attn(self.ln_1(x))" } },
     { id: "ln2", label: "LayerNorm 2", level: "logic", status: "neutral", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward" } },
     { id: "mlp", label: "MLP", level: "logic", status: "neutral", piece: "machine", anchor: { file: "model.py", symbol: "MLP.forward" } },
-    { id: "residual-2", label: "Residual add", level: "dataflow", status: "neutral", piece: "bypass", anchor: { file: "model.py", source: "x = x + self.mlp(self.ln_2(x))" } },
+    { id: "residual-2", label: "Residual merge", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", source: "x = x + self.mlp(self.ln_2(x))" } },
   ],
 };
 

@@ -49,7 +49,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
 
     async function initialize() {
       const visible = focus.children?.length ? focus.children : [focus];
-      const layout = layoutPipeWorld(visible);
+      const layout = layoutPipeWorld(visible, focus.edges);
       const pixi = new Application();
       await pixi.init({ resizeTo: hostElement, antialias: true, backgroundAlpha: 0, autoDensity: true, resolution: Math.min(window.devicePixelRatio || 1, 2) });
       if (disposed) { pixi.destroy(true); return; }
@@ -61,6 +61,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       pixi.stage.addChild(camera);
       drawGrid(camera, layout);
       drawPipe(camera, layout.path);
+      layout.bypassPaths.forEach((bypass) => drawPipe(camera, bypass.path));
 
       const flow = new Graphics();
       camera.addChild(flow);
@@ -138,7 +139,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
             }
           }
         }
-        redrawFlow(flow, layout.path, runtime.distance);
+        redrawFlow(flow, layout, runtime.distance);
         updateParticles(particles, layout.path, runtime.distance, metrics.totalLength, runtime.blocked, ticker.lastTime / 1000);
         updateFills(fills, layout, runtime.distance);
         updateSelection(selection, layout, selectedRef.current, ticker.lastTime / 1000);
@@ -215,12 +216,23 @@ function drawPipe(camera: Container, path: WorldPoint[]) {
   camera.addChild(pipe);
 }
 
-function redrawFlow(graphics: Graphics, path: WorldPoint[], distance: number) {
+function redrawFlow(graphics: Graphics, layout: PipeWorldLayout, distance: number) {
   graphics.clear();
-  const partial = partialPath(path, distance);
-  if (partial.length < 2) return;
-  strokePath(graphics, partial, BLUE_DARK, 11, 1);
-  strokePath(graphics, partial, BLUE, 6, 1);
+  const partial = partialPath(layout.path, distance);
+  if (partial.length >= 2) {
+    strokePath(graphics, partial, BLUE_DARK, 11, 1);
+    strokePath(graphics, partial, BLUE, 6, 1);
+  }
+  layout.bypassPaths.forEach((bypass) => {
+    if (distance <= bypass.startDistance) return;
+    const span = Math.max(1, bypass.endDistance - bypass.startDistance);
+    const progress = clamp((distance - bypass.startDistance) / span, 0, 1);
+    const bypassDistance = pathMetrics(bypass.path).totalLength * progress;
+    const bypassPartial = partialPath(bypass.path, bypassDistance);
+    if (bypassPartial.length < 2) return;
+    strokePath(graphics, bypassPartial, BLUE_DARK, 11, 1);
+    strokePath(graphics, bypassPartial, BLUE, 6, 1);
+  });
 }
 
 function createParticles(count: number) {
