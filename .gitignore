@@ -11,6 +11,7 @@ venv/
 node_modules/
 dist/
 .vite/
+.vercel/
 *.tsbuildinfo
 playwright-report/
 test-results/
