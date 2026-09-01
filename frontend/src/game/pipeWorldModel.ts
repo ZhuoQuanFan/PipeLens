@@ -9,12 +9,14 @@ export type WorldNode = {
   y: number;
   width: number;
   height: number;
+  flowDistance?: number;
 };
 
 export type PipeWorldLayout = {
   nodes: WorldNode[];
   path: WorldPoint[];
   bypassPaths: BypassWorldPath[];
+  branchPaths: BranchWorldPath[];
   start: WorldPoint;
   end: WorldPoint;
   width: number;
@@ -28,6 +30,12 @@ export type BypassWorldPath = {
   to: PipeEdge["to"];
   path: WorldPoint[];
   startDistance: number;
+  endDistance: number;
+};
+
+export type BranchWorldPath = {
+  id: string;
+  path: WorldPoint[];
   endDistance: number;
 };
 
@@ -45,6 +53,8 @@ const WORLD_PADDING_Y = 170;
 export function layoutPipeWorld(nodes: PipeNode[], edges: PipeEdge[] = []): PipeWorldLayout {
   const bypassEdges = edges.filter((edge) => edge.kind === "bypass");
   if (bypassEdges.length) return layoutResidualWorld(nodes, bypassEdges);
+  const branchEdges = edges.filter((edge) => edge.kind === "branch");
+  if (branchEdges.length) return layoutBranchWorld(nodes, branchEdges);
 
   const perRow = chooseWorldRowSize(nodes.length);
   const rows = Math.max(1, Math.ceil(nodes.length / perRow));
@@ -85,6 +95,7 @@ export function layoutPipeWorld(nodes: PipeNode[], edges: PipeEdge[] = []): Pipe
     nodes: worldNodes,
     path,
     bypassPaths: [],
+    branchPaths: [],
     start,
     end,
     width: worldWidth,
@@ -176,12 +187,98 @@ function layoutResidualWorld(nodes: PipeNode[], bypassEdges: PipeEdge[]): PipeWo
     nodes: worldNodes,
     path,
     bypassPaths,
+    branchPaths: [],
     start,
     end,
     width: worldWidth,
     height: worldHeight,
     faultIndex: nodes.findIndex((node) => node.status === "fault"),
   };
+}
+
+function layoutBranchWorld(nodes: PipeNode[], branchEdges: PipeEdge[]): PipeWorldLayout {
+  const incomingCounts = new Map<string, number>();
+  branchEdges.forEach((edge) => {
+    if (edge.to !== "$output") incomingCounts.set(edge.to, (incomingCounts.get(edge.to) ?? 0) + 1);
+  });
+  const mergeId = [...incomingCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
+  const mergeNode = nodes.find((node) => node.id === mergeId) ?? nodes.at(-1);
+  const branchNodes = nodes.filter((node) => node.id !== mergeNode?.id);
+  if (!mergeNode || !branchNodes.length) return layoutPipeWorld(nodes);
+
+  const branchGap = 90;
+  const worldWidth = 1_300;
+  const worldHeight = WORLD_PADDING_Y * 2 + branchNodes.length * NODE_HEIGHT + Math.max(0, branchNodes.length - 1) * branchGap;
+  const branchX = WORLD_PADDING_X + 210;
+  const branchWorldNodes: WorldNode[] = branchNodes.map((node, index) => ({
+    node,
+    index,
+    x: branchX,
+    y: WORLD_PADDING_Y + index * (NODE_HEIGHT + branchGap),
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
+  }));
+  const firstCenter = centerOf(branchWorldNodes[0]);
+  const lastCenter = centerOf(branchWorldNodes.at(-1)!);
+  const mergeWorldNode: WorldNode = {
+    node: mergeNode,
+    index: branchNodes.length,
+    x: branchX + NODE_WIDTH + 270,
+    y: (firstCenter.y + lastCenter.y) / 2 - NODE_HEIGHT / 2,
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
+  };
+  const mergeCenter = centerOf(mergeWorldNode);
+  const start = { x: WORLD_PADDING_X, y: mergeCenter.y };
+  const end = { x: mergeWorldNode.x + NODE_WIDTH + 150, y: mergeCenter.y };
+  const path = dedupePoints([
+    start,
+    { x: branchX - 90, y: start.y },
+    { x: branchX - 90, y: firstCenter.y },
+    firstCenter,
+    { x: mergeWorldNode.x - 90, y: firstCenter.y },
+    { x: mergeWorldNode.x - 90, y: mergeCenter.y },
+    mergeCenter,
+    end,
+  ]);
+  const branchDistance = distanceAlongPath(path, firstCenter);
+  const mergeDistance = distanceAlongPath(path, mergeCenter);
+  branchWorldNodes.forEach((node) => { node.flowDistance = branchDistance; });
+  mergeWorldNode.flowDistance = mergeDistance;
+
+  const branchPaths: BranchWorldPath[] = branchWorldNodes.slice(1).map((worldNode) => {
+    const center = centerOf(worldNode);
+    return {
+      id: `branch:${worldNode.node.id}`,
+      path: dedupePoints([
+        start,
+        { x: branchX - 90, y: start.y },
+        { x: branchX - 90, y: center.y },
+        center,
+        { x: mergeWorldNode.x - 90, y: center.y },
+        { x: mergeWorldNode.x - 90, y: mergeCenter.y },
+        mergeCenter,
+      ]),
+      endDistance: mergeDistance,
+    };
+  });
+  const worldNodes = [...branchWorldNodes, mergeWorldNode];
+
+  return {
+    nodes: worldNodes,
+    path,
+    bypassPaths: [],
+    branchPaths,
+    start,
+    end,
+    width: worldWidth,
+    height: worldHeight,
+    faultIndex: worldNodes.findIndex((item) => item.node.status === "fault"),
+  };
+}
+
+function centerOf(node: WorldNode): WorldPoint {
+  return { x: node.x + node.width / 2, y: node.y + node.height / 2 };
 }
 
 function distanceAlongPath(path: WorldPoint[], target: WorldPoint) {

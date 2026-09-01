@@ -62,6 +62,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       drawGrid(camera, layout);
       drawPipe(camera, layout.path);
       layout.bypassPaths.forEach((bypass) => drawPipe(camera, bypass.path));
+      layout.branchPaths.forEach((branch) => drawPipe(camera, branch.path));
 
       const flow = new Graphics();
       camera.addChild(flow);
@@ -233,6 +234,14 @@ function redrawFlow(graphics: Graphics, layout: PipeWorldLayout, distance: numbe
     strokePath(graphics, bypassPartial, BLUE_DARK, 11, 1);
     strokePath(graphics, bypassPartial, BLUE, 6, 1);
   });
+  layout.branchPaths.forEach((branch) => {
+    const progress = clamp(distance / Math.max(1, branch.endDistance), 0, 1);
+    const branchDistance = pathMetrics(branch.path).totalLength * progress;
+    const branchPartial = partialPath(branch.path, branchDistance);
+    if (branchPartial.length < 2) return;
+    strokePath(graphics, branchPartial, BLUE_DARK, 11, 1);
+    strokePath(graphics, branchPartial, BLUE, 6, 1);
+  });
 }
 
 function createParticles(count: number) {
@@ -255,7 +264,7 @@ function updateFills(fills: Map<string, Graphics>, layout: PipeWorldLayout, dist
   layout.nodes.forEach((worldNode) => {
     const fill = fills.get(worldNode.node.id);
     if (!fill) return;
-    const center = distanceTo(layout.path, { x: worldNode.x + worldNode.width / 2, y: worldNode.y + worldNode.height / 2 });
+    const center = worldNode.flowDistance ?? distanceTo(layout.path, { x: worldNode.x + worldNode.width / 2, y: worldNode.y + worldNode.height / 2 });
     const progress = clamp((distance - center + 65) / 130, 0, 1);
     fill.scale.x = progress;
     fill.tint = worldNode.node.status === "fault" && progress > 0.45 ? RED : BLUE;

@@ -143,6 +143,13 @@ export const nanoGptCase: PipeNode = {
       status: "healthy",
       piece: "junction",
       anchor: { file: "model.py", symbol: "GPT.forward", source: "tok_emb + pos_emb" },
+      edges: [
+        { id: "embedding-input-token", from: "$input", to: "wte", kind: "branch" },
+        { id: "embedding-input-position", from: "$input", to: "wpe", kind: "branch" },
+        { id: "embedding-token-merge", from: "wte", to: "embed-add", kind: "branch" },
+        { id: "embedding-position-merge", from: "wpe", to: "embed-add", kind: "branch" },
+        { id: "embedding-output", from: "embed-add", to: "$output", kind: "sequence" },
+      ],
       children: [
         { id: "wte", label: "wte(idx)", level: "function", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "transformer.wte" } },
         { id: "wpe", label: "wpe(pos)", level: "function", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "transformer.wpe" } },

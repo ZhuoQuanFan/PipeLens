@@ -29,4 +29,19 @@ describe("PipeWorld semantic topology", () => {
     expect(layout.nodes).toHaveLength(attention?.children?.length ?? 0);
     expect(layout.path.length).toBeGreaterThan(1);
   });
+
+  it("lays parallel embedding computations out as branches that share a merge junction", () => {
+    const embedding = findPipeNode(nanoGptCase, "token-position-embedding");
+    const layout = layoutPipeWorld(embedding?.children ?? [], embedding?.edges);
+    const token = layout.nodes.find((item) => item.node.id === "wte");
+    const position = layout.nodes.find((item) => item.node.id === "wpe");
+    const merge = layout.nodes.find((item) => item.node.id === "embed-add");
+
+    expect(layout.branchPaths).toHaveLength(1);
+    expect(token?.y).not.toBe(position?.y);
+    expect(token?.x).toBe(position?.x);
+    expect(merge?.x).toBeGreaterThan(token?.x ?? Number.POSITIVE_INFINITY);
+    expect(merge?.node.piece).toBe("junction");
+    expect(token?.flowDistance).toBe(position?.flowDistance);
+  });
 });
