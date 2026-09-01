@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Application, Container, Graphics, Text } from "pixi.js";
 
 import type { PipeNode, ScriptedAgentStep } from "../cases/nanogpt";
+import { renderPipePiece } from "./pipePieces";
 import { layoutPipeWorld, pathMetrics, pointAtDistance, type PipeWorldLayout, type WorldNode, type WorldPoint } from "./pipeWorldModel";
 
 type Props = {
@@ -65,7 +66,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       camera.addChild(flow);
       const fills = new Map<string, Graphics>();
       layout.nodes.forEach((worldNode) => {
-        const { container, fill } = createComponent(worldNode, () => {
+        const { container, fill } = renderPipePiece(worldNode, () => {
           onSelect(worldNode.node);
           focusCamera(camera, pixi, worldNode);
           if (worldNode.node.children?.length) timeoutIds.push(window.setTimeout(() => onOpen(worldNode.node), 320));
@@ -78,7 +79,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       camera.addChild(selection);
       const agentProbe = createAgentProbe();
       camera.addChild(agentProbe);
-      const particles = createParticles(18);
+      const particles = createParticles(22);
       particles.forEach((particle) => camera.addChild(particle));
       const impact = new Graphics();
       camera.addChild(impact);
@@ -206,43 +207,145 @@ function drawGrid(camera: Container, layout: PipeWorldLayout) {
 
 function drawPipe(camera: Container, path: WorldPoint[]) {
   const pipe = new Graphics();
-  strokePath(pipe, path, COPPER_DARK, 34, 1); strokePath(pipe, path, COPPER, 27, 1); strokePath(pipe, path, 0xeab680, 6, 0.58); strokePath(pipe, path, PIPE_INNER, 16, 1); strokePath(pipe, path, 0x425767, 4, 0.65);
+  strokePath(pipe, path, COPPER_DARK, 34, 1);
+  strokePath(pipe, path, COPPER, 27, 1);
+  strokePath(pipe, path, 0xeab680, 6, 0.58);
+  strokePath(pipe, path, PIPE_INNER, 16, 1);
+  strokePath(pipe, path, 0x425767, 4, 0.65);
   camera.addChild(pipe);
 }
 
 function redrawFlow(graphics: Graphics, path: WorldPoint[], distance: number) {
-  graphics.clear(); const partial = partialPath(path, distance); if (partial.length < 2) return; strokePath(graphics, partial, BLUE_DARK, 11, 1); strokePath(graphics, partial, BLUE, 6, 1);
+  graphics.clear();
+  const partial = partialPath(path, distance);
+  if (partial.length < 2) return;
+  strokePath(graphics, partial, BLUE_DARK, 11, 1);
+  strokePath(graphics, partial, BLUE, 6, 1);
 }
 
-function createComponent(worldNode: WorldNode, onOpen: () => void) {
-  const container = new Container({ x: worldNode.x, y: worldNode.y });
-  container.eventMode = "static"; container.cursor = "pointer"; container.on("pointertap", onOpen);
-  const shadow = new Graphics().roundRect(8, 10, worldNode.width, worldNode.height, 22).fill({ color: 0x253746, alpha: 0.16 });
-  const body = new Graphics().roundRect(0, 0, worldNode.width, worldNode.height, 22).fill({ color: 0xf8fbfd });
-  body.roundRect(0, 0, worldNode.width, worldNode.height, 22).stroke({ color: worldNode.node.status === "fault" ? RED : 0x9babb8, width: worldNode.node.status === "fault" ? 4 : 2 });
-  body.roundRect(9, 9, worldNode.width - 18, 17, 9).fill({ color: worldNode.node.status === "fault" ? 0xffe4e4 : 0xe7eef3 });
-  container.addChild(shadow, body);
-  const level = new Text({ text: worldNode.node.level.toUpperCase(), style: { fontFamily: "Inter, Arial", fontSize: 10, fontWeight: "700", fill: 0x72808c, letterSpacing: 1.1 } }); level.position.set(18, 12);
-  const title = new Text({ text: worldNode.node.label, style: { fontFamily: "Inter, Arial", fontSize: 16, fontWeight: "700", fill: 0x162330, align: "center", wordWrap: true, wordWrapWidth: worldNode.width - 30 } }); title.anchor.set(0.5, 0); title.position.set(worldNode.width / 2, 38);
-  container.addChild(level, title);
-  const channel = new Graphics().roundRect(24, worldNode.height - 29, worldNode.width - 48, 12, 6).fill({ color: PIPE_INNER });
-  const fill = new Graphics().roundRect(27, worldNode.height - 26, worldNode.width - 54, 6, 3).fill({ color: BLUE }); fill.scale.x = 0; container.addChild(channel, fill);
-  if (worldNode.node.children?.length) { const open = new Text({ text: `ENTER ×${worldNode.node.children.length}`, style: { fontFamily: "Inter, Arial", fontSize: 9, fontWeight: "700", fill: BLUE_DARK } }); open.anchor.set(0.5, 1); open.position.set(worldNode.width / 2, worldNode.height - 36); container.addChild(open); }
-  if (worldNode.node.status === "fault") { const badge = new Graphics().circle(worldNode.width - 8, 8, 15).fill({ color: RED }); badge.circle(worldNode.width - 8, 8, 15).stroke({ color: 0xffffff, width: 4 }); const mark = new Text({ text: "!", style: { fontFamily: "Arial", fontSize: 18, fontWeight: "900", fill: 0xffffff } }); mark.anchor.set(0.5); mark.position.set(worldNode.width - 8, 8); container.addChild(badge, mark); }
-  return { container, fill };
+function createParticles(count: number) {
+  return Array.from({ length: count }, (_, index) => new Graphics().circle(0, 0, 3 + (index % 3) * 0.6).fill({ color: index % 4 === 0 ? 0xb9e6ff : BLUE, alpha: 0.6 }));
 }
 
-function createParticles(count: number) { return Array.from({ length: count }, (_, index) => new Graphics().circle(0, 0, 3 + (index % 3) * 0.6).fill({ color: index % 4 === 0 ? 0xb9e6ff : BLUE, alpha: 0.6 })); }
-function updateParticles(particles: Graphics[], path: WorldPoint[], head: number, total: number, blocked: boolean, time: number) { particles.forEach((particle, index) => { const distance = head - index * 20; particle.visible = distance >= 0 && distance <= total; if (!particle.visible) return; const point = pointAtDistance(path, distance); particle.position.set(point.x, point.y); particle.scale.set(blocked ? 0.7 + Math.sin(time * 5 + index) * 0.08 : 1); particle.alpha = blocked ? 0.32 : 0.58 + (index % 4) * 0.1; }); }
-function updateFills(fills: Map<string, Graphics>, layout: PipeWorldLayout, distance: number) { layout.nodes.forEach((worldNode) => { const fill = fills.get(worldNode.node.id); if (!fill) return; const center = distanceTo(layout.path, { x: worldNode.x + worldNode.width / 2, y: worldNode.y + worldNode.height / 2 }); const progress = clamp((distance - center + 65) / 130, 0, 1); fill.scale.x = progress; fill.tint = worldNode.node.status === "fault" && progress > 0.45 ? RED : BLUE; }); }
-function updateSelection(graphics: Graphics, layout: PipeWorldLayout, selectedId: string, time: number) { graphics.clear(); const node = layout.nodes.find((item) => item.node.id === selectedId); if (!node) return; const pad = 6 + Math.sin(time * 3.5) * 2; graphics.roundRect(node.x - pad, node.y - pad, node.width + pad * 2, node.height + pad * 2, 28).stroke({ color: PURPLE, width: 3, alpha: 0.55 }); }
-function createAgentProbe() { const probe = new Container(); const ring = new Graphics().circle(0, 0, 18).stroke({ color: PURPLE, width: 4 }).circle(0, 0, 7).fill({ color: PURPLE }); const label = new Text({ text: "AI", style: { fontFamily: "Inter, Arial", fontSize: 9, fontWeight: "900", fill: 0xffffff } }); label.anchor.set(0.5); probe.addChild(ring, label); probe.visible = false; return probe; }
-function updateAgentProbe(probe: Container, layout: PipeWorldLayout, nodeId: string | undefined, time: number) { const target = nodeId ? layout.nodes.find((item) => item.node.id === nodeId) : undefined; probe.visible = Boolean(target); if (target) probe.position.set(target.x + target.width - 5, target.y - 18 + Math.sin(time * 4) * 5); }
-function updateImpact(impact: Graphics, blocked: boolean, time: number) { impact.visible = blocked; impact.clear(); if (!blocked) return; const pulse = 28 + Math.sin(time * 7) * 8; impact.circle(0, 0, pulse).stroke({ color: RED, width: 7, alpha: 0.55 }); for (let index = 0; index < 10; index += 1) { const angle = Math.PI * 2 * index / 10 + time * (index % 2 ? 0.6 : -0.6); const radius = 34 + (index % 3) * 12; impact.circle(Math.cos(angle) * radius, Math.sin(angle) * radius, 3).fill({ color: RED, alpha: 0.75 }); } }
-function computeFaultDistance(layout: PipeWorldLayout) { if (layout.faultIndex < 0) return null; const fault = layout.nodes[layout.faultIndex]; return distanceTo(layout.path, { x: fault.x + fault.width / 2, y: fault.y + fault.height / 2 }); }
-function distanceTo(path: WorldPoint[], target: WorldPoint) { let distance = 0; for (let index = 1; index < path.length; index += 1) { const start = path[index - 1]; const end = path[index]; const segment = Math.hypot(end.x - start.x, end.y - start.y); if (Math.abs(end.x - target.x) < 0.5 && Math.abs(end.y - target.y) < 0.5) return distance + segment; distance += segment; } return distance; }
-function partialPath(path: WorldPoint[], distance: number) { if (!path.length) return []; const result: WorldPoint[] = [path[0]]; let remaining = Math.max(0, distance); for (let index = 1; index < path.length; index += 1) { const start = path[index - 1]; const end = path[index]; const length = Math.hypot(end.x - start.x, end.y - start.y); if (remaining >= length) { result.push(end); remaining -= length; continue; } if (remaining > 0) { const ratio = length === 0 ? 0 : remaining / length; result.push({ x: start.x + (end.x - start.x) * ratio, y: start.y + (end.y - start.y) * ratio }); } break; } return result; }
-function strokePath(graphics: Graphics, path: WorldPoint[], color: number, width: number, alpha: number) { if (path.length < 2) return; graphics.moveTo(path[0].x, path[0].y); for (let index = 1; index < path.length; index += 1) graphics.lineTo(path[index].x, path[index].y); graphics.stroke({ color, width, alpha, cap: "round", join: "round" }); }
-function fitCamera(camera: Container, app: Application, layout: PipeWorldLayout) { const scale = clamp(Math.min(app.screen.width / layout.width, app.screen.height / layout.height) * 0.93, 0.42, 1.25); camera.scale.set(scale); camera.position.set((app.screen.width - layout.width * scale) / 2, (app.screen.height - layout.height * scale) / 2); }
-function focusCamera(camera: Container, app: Application, node: WorldNode) { const scale = clamp(Math.max(camera.scale.x, 1.12), 0.5, 1.8); camera.scale.set(scale); camera.position.set(app.screen.width / 2 - (node.x + node.width / 2) * scale, app.screen.height / 2 - (node.y + node.height / 2) * scale); }
-function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
+function updateParticles(particles: Graphics[], path: WorldPoint[], head: number, total: number, blocked: boolean, time: number) {
+  particles.forEach((particle, index) => {
+    const distance = head - index * 20;
+    particle.visible = distance >= 0 && distance <= total;
+    if (!particle.visible) return;
+    const point = pointAtDistance(path, distance);
+    particle.position.set(point.x, point.y);
+    particle.scale.set(blocked ? 0.7 + Math.sin(time * 5 + index) * 0.08 : 1);
+    particle.alpha = blocked ? 0.32 : 0.58 + (index % 4) * 0.1;
+  });
+}
+
+function updateFills(fills: Map<string, Graphics>, layout: PipeWorldLayout, distance: number) {
+  layout.nodes.forEach((worldNode) => {
+    const fill = fills.get(worldNode.node.id);
+    if (!fill) return;
+    const center = distanceTo(layout.path, { x: worldNode.x + worldNode.width / 2, y: worldNode.y + worldNode.height / 2 });
+    const progress = clamp((distance - center + 65) / 130, 0, 1);
+    fill.scale.x = progress;
+    fill.tint = worldNode.node.status === "fault" && progress > 0.45 ? RED : BLUE;
+  });
+}
+
+function updateSelection(graphics: Graphics, layout: PipeWorldLayout, selectedId: string, time: number) {
+  graphics.clear();
+  const node = layout.nodes.find((item) => item.node.id === selectedId);
+  if (!node) return;
+  const pad = 6 + Math.sin(time * 3.5) * 2;
+  graphics.roundRect(node.x - pad, node.y - pad, node.width + pad * 2, node.height + pad * 2, 28).stroke({ color: PURPLE, width: 3, alpha: 0.55 });
+}
+
+function createAgentProbe() {
+  const probe = new Container();
+  const ring = new Graphics().circle(0, 0, 18).stroke({ color: PURPLE, width: 4 }).circle(0, 0, 7).fill({ color: PURPLE });
+  const label = new Text({ text: "AI", style: { fontFamily: "Inter, Arial", fontSize: 9, fontWeight: "900", fill: 0xffffff } });
+  label.anchor.set(0.5);
+  probe.addChild(ring, label);
+  probe.visible = false;
+  return probe;
+}
+
+function updateAgentProbe(probe: Container, layout: PipeWorldLayout, nodeId: string | undefined, time: number) {
+  const target = nodeId ? layout.nodes.find((item) => item.node.id === nodeId) : undefined;
+  probe.visible = Boolean(target);
+  if (target) probe.position.set(target.x + target.width - 5, target.y - 18 + Math.sin(time * 4) * 5);
+}
+
+function updateImpact(impact: Graphics, blocked: boolean, time: number) {
+  impact.visible = blocked;
+  impact.clear();
+  if (!blocked) return;
+  const pulse = 28 + Math.sin(time * 7) * 8;
+  impact.circle(0, 0, pulse).stroke({ color: RED, width: 7, alpha: 0.55 });
+  for (let index = 0; index < 10; index += 1) {
+    const angle = Math.PI * 2 * index / 10 + time * (index % 2 ? 0.6 : -0.6);
+    const radius = 34 + (index % 3) * 12;
+    impact.circle(Math.cos(angle) * radius, Math.sin(angle) * radius, 3).fill({ color: RED, alpha: 0.75 });
+  }
+}
+
+function computeFaultDistance(layout: PipeWorldLayout) {
+  if (layout.faultIndex < 0) return null;
+  const fault = layout.nodes[layout.faultIndex];
+  return distanceTo(layout.path, { x: fault.x + fault.width / 2, y: fault.y + fault.height / 2 });
+}
+
+function distanceTo(path: WorldPoint[], target: WorldPoint) {
+  let distance = 0;
+  for (let index = 1; index < path.length; index += 1) {
+    const start = path[index - 1];
+    const end = path[index];
+    const segment = Math.hypot(end.x - start.x, end.y - start.y);
+    if (Math.abs(end.x - target.x) < 0.5 && Math.abs(end.y - target.y) < 0.5) return distance + segment;
+    distance += segment;
+  }
+  return distance;
+}
+
+function partialPath(path: WorldPoint[], distance: number) {
+  if (!path.length) return [];
+  const result: WorldPoint[] = [path[0]];
+  let remaining = Math.max(0, distance);
+  for (let index = 1; index < path.length; index += 1) {
+    const start = path[index - 1];
+    const end = path[index];
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    if (remaining >= length) {
+      result.push(end);
+      remaining -= length;
+      continue;
+    }
+    if (remaining > 0) {
+      const ratio = length === 0 ? 0 : remaining / length;
+      result.push({ x: start.x + (end.x - start.x) * ratio, y: start.y + (end.y - start.y) * ratio });
+    }
+    break;
+  }
+  return result;
+}
+
+function strokePath(graphics: Graphics, path: WorldPoint[], color: number, width: number, alpha: number) {
+  if (path.length < 2) return;
+  graphics.moveTo(path[0].x, path[0].y);
+  for (let index = 1; index < path.length; index += 1) graphics.lineTo(path[index].x, path[index].y);
+  graphics.stroke({ color, width, alpha, cap: "round", join: "round" });
+}
+
+function fitCamera(camera: Container, app: Application, layout: PipeWorldLayout) {
+  const scale = clamp(Math.min(app.screen.width / layout.width, app.screen.height / layout.height) * 0.93, 0.42, 1.25);
+  camera.scale.set(scale);
+  camera.position.set((app.screen.width - layout.width * scale) / 2, (app.screen.height - layout.height * scale) / 2);
+}
+
+function focusCamera(camera: Container, app: Application, node: WorldNode) {
+  const scale = clamp(Math.max(camera.scale.x, 1.12), 0.5, 1.8);
+  camera.scale.set(scale);
+  camera.position.set(app.screen.width / 2 - (node.x + node.width / 2) * scale, app.screen.height / 2 - (node.y + node.height / 2) * scale);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
