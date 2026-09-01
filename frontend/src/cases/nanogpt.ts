@@ -37,11 +37,11 @@ export type ScriptedAgentStep = {
   note: string;
 };
 
-const healthyBlock = (index: number): PipeNode => ({
+const transformerBlock = (index: number): PipeNode => ({
   id: `block-${index}`,
   label: `Block ${index}`,
   level: "function",
-  status: "healthy",
+  status: index < 6 ? "healthy" : "neutral",
   piece: "machine",
   anchor: { file: "model.py", symbol: "Block.forward" },
 });
@@ -84,22 +84,22 @@ const faultBlock: PipeNode = {
               piece: "blocked",
               anchor: { file: "model.py", source: "* (1.0 / math.sqrt(k.size(-1)))" },
             },
-            { id: "causal-mask", label: "Causal mask", level: "statement", status: "healthy", piece: "valve", anchor: { file: "model.py", source: "att.masked_fill(..., -inf)" } },
-            { id: "softmax", label: "Softmax", level: "statement", status: "healthy", piece: "machine", anchor: { file: "model.py", source: "F.softmax(att, dim=-1)" } },
+            { id: "causal-mask", label: "Causal mask", level: "statement", status: "neutral", piece: "valve", anchor: { file: "model.py", source: "att.masked_fill(..., -inf)" } },
+            { id: "softmax", label: "Softmax", level: "statement", status: "neutral", piece: "machine", anchor: { file: "model.py", source: "F.softmax(att, dim=-1)" } },
           ],
         },
-        { id: "weighted-value", label: "att @ v", level: "dataflow", status: "healthy", piece: "junction", anchor: { file: "model.py", source: "y = att @ v" } },
-        { id: "output-proj", label: "Output projection", level: "function", status: "healthy", piece: "valve", anchor: { file: "model.py", source: "self.resid_dropout(self.c_proj(y))" } },
+        { id: "weighted-value", label: "att @ v", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", source: "y = att @ v" } },
+        { id: "output-proj", label: "Output projection", level: "function", status: "neutral", piece: "valve", anchor: { file: "model.py", source: "self.resid_dropout(self.c_proj(y))" } },
       ],
     },
-    { id: "residual-1", label: "Residual add", level: "dataflow", status: "fault", piece: "bypass", anchor: { file: "model.py", source: "x = x + self.attn(self.ln_1(x))" } },
-    { id: "ln2", label: "LayerNorm 2", level: "logic", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward" } },
-    { id: "mlp", label: "MLP", level: "logic", status: "healthy", piece: "machine", anchor: { file: "model.py", symbol: "MLP.forward" } },
-    { id: "residual-2", label: "Residual add", level: "dataflow", status: "healthy", piece: "bypass", anchor: { file: "model.py", source: "x = x + self.mlp(self.ln_2(x))" } },
+    { id: "residual-1", label: "Residual add", level: "dataflow", status: "neutral", piece: "bypass", anchor: { file: "model.py", source: "x = x + self.attn(self.ln_1(x))" } },
+    { id: "ln2", label: "LayerNorm 2", level: "logic", status: "neutral", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward" } },
+    { id: "mlp", label: "MLP", level: "logic", status: "neutral", piece: "machine", anchor: { file: "model.py", symbol: "MLP.forward" } },
+    { id: "residual-2", label: "Residual add", level: "dataflow", status: "neutral", piece: "bypass", anchor: { file: "model.py", source: "x = x + self.mlp(self.ln_2(x))" } },
   ],
 };
 
-const transformerBlocks = Array.from({ length: 12 }, (_, index) => index === 6 ? faultBlock : healthyBlock(index));
+const transformerBlocks = Array.from({ length: 12 }, (_, index) => index === 6 ? faultBlock : transformerBlock(index));
 
 /**
  * A fault-injected replay over the public nanoGPT model structure.
@@ -138,9 +138,9 @@ export const nanoGptCase: PipeNode = {
       anchor: { file: "model.py", symbol: "Block" },
       children: transformerBlocks,
     },
-    { id: "final-ln", label: "Final LayerNorm", level: "logic", status: "fault", piece: "valve", anchor: { file: "model.py", source: "x = self.transformer.ln_f(x)" } },
-    { id: "lm-head", label: "LM Head", level: "logic", status: "fault", piece: "machine", anchor: { file: "model.py", source: "logits = self.lm_head(...)" } },
-    { id: "logits", label: "Logits", level: "behavior", status: "fault", piece: "straight", anchor: { file: "model.py", symbol: "GPT.forward" } },
+    { id: "final-ln", label: "Final LayerNorm", level: "logic", status: "neutral", piece: "valve", anchor: { file: "model.py", source: "x = self.transformer.ln_f(x)" } },
+    { id: "lm-head", label: "LM Head", level: "logic", status: "neutral", piece: "machine", anchor: { file: "model.py", source: "logits = self.lm_head(...)" } },
+    { id: "logits", label: "Logits", level: "behavior", status: "neutral", piece: "straight", anchor: { file: "model.py", symbol: "GPT.forward" } },
   ],
 };
 
