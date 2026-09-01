@@ -8,10 +8,12 @@ import {
   nanoGptCase,
   type PipeNode,
 } from "./cases/nanogpt";
+import { PipeGrammarLegend } from "./game/PipeGrammarLegend";
 import { PipeWorld } from "./game/PipeWorld";
 import { PipeInspector } from "./views/PipeCanvas";
 import "./pipe.css";
 import "./gameWorld.css";
+import "./pipeGrammar.css";
 
 function App() {
   const [focusId, setFocusId] = useState("block-6");
@@ -57,8 +59,8 @@ function App() {
             <div className="case-kicker">FAMOUS CODE CASE · karpathy/nanoGPT</div>
             <h1>PipeLens PipeWorld</h1>
             <p>
-              Program execution is rendered as a live entity moving through a 2D code world. The camera follows execution,
-              components can be entered like game objects, and a hard fault physically blocks downstream flow.
+              Program execution is rendered as a live entity moving through a 2D code world. Code structure is encoded as
+              different game pieces, while a hard fault physically blocks downstream flow.
             </p>
           </div>
           <div className="game-badge">game-like interaction · scientific visualization semantics</div>
@@ -73,6 +75,8 @@ function App() {
             </button>
           ))}
         </nav>
+
+        <PipeGrammarLegend />
 
         <PipeWorld
           focus={focus}
