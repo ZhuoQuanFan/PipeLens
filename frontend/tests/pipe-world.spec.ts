@@ -81,12 +81,11 @@ test("resizes the inspector and stages an AI edit before applying it", async ({ 
   const runtimeErrors = collectRuntimeErrors(page);
   await page.route("**/api/ai-edit", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 250));
-    const request = route.request().postDataJSON() as { source: string };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        updatedSource: request.source.replace("1e-5", "1e-6"),
+        replacementSource: "    def forward(self, input):\n        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-6)",
         summary: "Tighten the LayerNorm epsilon.",
       }),
     });

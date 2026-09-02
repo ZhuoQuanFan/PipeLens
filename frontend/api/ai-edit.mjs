@@ -1,7 +1,7 @@
 const requestBuckets = new Map();
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 6;
-const MAX_SOURCE_LENGTH = 120_000;
+const MAX_CONTEXT_LENGTH = 40_000;
 
 function allowedOrigin(origin) {
   if (!origin) return true;
@@ -34,11 +34,11 @@ export default async function handler(request, response) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return json(response, 503, { error: "DeepSeek is not configured on this deployment." });
 
-  const { filePath, source, instruction, selection } = request.body ?? {};
-  if (typeof filePath !== "string" || typeof source !== "string" || typeof instruction !== "string") {
-    return json(response, 400, { error: "filePath, source and instruction are required." });
+  const { filePath, sourceContext, selectedSource, instruction, selection } = request.body ?? {};
+  if (typeof filePath !== "string" || typeof sourceContext !== "string" || typeof selectedSource !== "string" || typeof instruction !== "string") {
+    return json(response, 400, { error: "filePath, source context, selected source and instruction are required." });
   }
-  if (!instruction.trim() || instruction.length > 4_000 || source.length > MAX_SOURCE_LENGTH) {
+  if (!instruction.trim() || instruction.length > 4_000 || sourceContext.length > MAX_CONTEXT_LENGTH || selectedSource.length > MAX_CONTEXT_LENGTH) {
     return json(response, 413, { error: "The instruction or source file is too large." });
   }
 
@@ -46,8 +46,9 @@ export default async function handler(request, response) {
   const prompt = [
     selectedRange,
     `Requested change: ${instruction.trim()}`,
-    "Return the complete updated file, preserving all unrelated code and formatting.",
-    `FILE ${filePath}:\n${source}`,
+    "Return only the replacement text for the selected lines. Preserve indentation and do not repeat line numbers.",
+    `SELECTED SOURCE:\n${selectedSource}`,
+    `NEARBY CONTEXT (read-only, with line numbers):\n${sourceContext}`,
   ].filter(Boolean).join("\n\n");
 
   try {
@@ -57,12 +58,12 @@ export default async function handler(request, response) {
       body: JSON.stringify({
         model: "deepseek-v4-flash",
         messages: [
-          { role: "system", content: "You are PipeLens, a precise coding agent. Reply as one JSON object with string fields updated_source and summary. Never use markdown fences." },
+          { role: "system", content: "You are PipeLens, a precise coding agent. Reply as one JSON object with string fields replacement_source and summary. Never use markdown fences. Modify only the selected source." },
           { role: "user", content: prompt },
         ],
         response_format: { type: "json_object" },
         temperature: 0.2,
-        max_tokens: 8_192,
+        max_tokens: 2_048,
         stream: false,
       }),
     });
@@ -71,10 +72,10 @@ export default async function handler(request, response) {
     const raw = payload?.choices?.[0]?.message?.content;
     if (typeof raw !== "string") return json(response, 502, { error: "DeepSeek returned no editable source." });
     const parsed = JSON.parse(raw);
-    if (typeof parsed.updated_source !== "string" || typeof parsed.summary !== "string") {
+    if (typeof parsed.replacement_source !== "string" || typeof parsed.summary !== "string") {
       return json(response, 502, { error: "DeepSeek returned an invalid edit response." });
     }
-    return json(response, 200, { updatedSource: parsed.updated_source, summary: parsed.summary, model: "deepseek-v4-flash" });
+    return json(response, 200, { replacementSource: parsed.replacement_source, summary: parsed.summary, model: "deepseek-v4-flash" });
   } catch (error) {
     return json(response, 502, { error: error instanceof Error ? error.message : "DeepSeek request failed." });
   }
