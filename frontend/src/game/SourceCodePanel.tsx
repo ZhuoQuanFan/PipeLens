@@ -134,7 +134,7 @@ export function SourceCodePanel({ node, workspace, workspaceError, onImport, onU
           disabled={!file || requesting}
         />
         {aiError ? <p className="ai-edit-error">{aiError}</p> : null}
-        {candidate ? <p className="ai-edit-summary"><strong>🔨 Edit ready</strong>{candidate.summary}</p> : null}
+        {candidate ? <p className="ai-edit-summary"><strong>Edit ready</strong>{candidate.summary}</p> : null}
         <div className="ai-edit-actions">
           {candidate ? (
             <>
@@ -143,7 +143,7 @@ export function SourceCodePanel({ node, workspace, workspaceError, onImport, onU
             </>
           ) : (
             <button type="button" disabled={!file || !instruction.trim() || requesting} onClick={askForEdit}>
-              {requesting ? "🔍 Inspecting…" : "Ask AI to modify"}
+              {requesting ? "Inspecting…" : "Ask AI to modify"}
             </button>
           )}
         </div>

@@ -204,7 +204,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiAc
     <div className="game-world-hud bottom-left"><span>drag to pan</span><span>wheel to zoom</span><span>click component to enter</span></div>
     {aiActivity ? (
       <div className={`ai-worker-status ${aiActivity.phase}`} role="status">
-        <span>{aiActivity.phase === "inspecting" ? "🔍" : "🔨"}</span>
+        <AiActionIcon phase={aiActivity.phase} />
         <strong>DeepSeek is {aiActivity.phase}</strong>
       </div>
     ) : null}
@@ -318,7 +318,7 @@ function updateAgentProbe(probe: Container, layout: PipeWorldLayout, nodeId: str
   if (target) probe.position.set(target.x + target.width - 5, target.y - 18 + Math.sin(time * 4) * 5);
 }
 
-type AiWorker = Container & { actionLabel: Text };
+type AiWorker = Container & { actionIcon: Graphics };
 
 function createAiWorker() {
   const worker = new Container() as AiWorker;
@@ -331,11 +331,11 @@ function createAiWorker() {
   const badge = new Text({ text: "DS", style: { fontFamily: "Inter, Arial", fontSize: 7, fontWeight: "900", fill: 0xffffff } });
   badge.anchor.set(0.5);
   badge.position.set(0, 11);
-  const actionLabel = new Text({ text: "🔍", style: { fontFamily: "Arial", fontSize: 19, fontWeight: "700", fill: 0x13202b } });
-  actionLabel.anchor.set(0.5);
-  actionLabel.position.set(23, -20);
-  worker.actionLabel = actionLabel;
-  worker.addChild(glow, body, badge, actionLabel);
+  const actionIcon = new Graphics();
+  actionIcon.position.set(23, -20);
+  drawAiAction(actionIcon, "inspecting");
+  worker.actionIcon = actionIcon;
+  worker.addChild(glow, body, badge, actionIcon);
   worker.visible = false;
   return worker;
 }
@@ -344,9 +344,33 @@ function updateAiWorker(worker: AiWorker, layout: PipeWorldLayout, activity: AiA
   const target = activity ? layout.nodes.find((item) => item.node.id === activity.nodeId) : undefined;
   worker.visible = Boolean(target && activity);
   if (!target || !activity) return;
-  worker.actionLabel.text = activity.phase === "inspecting" ? "🔍" : "🔨";
+  drawAiAction(worker.actionIcon, activity.phase);
   worker.position.set(target.x + target.width / 2, target.y - 36 + Math.sin(time * 4.6) * 4);
   worker.rotation = Math.sin(time * 3) * 0.025;
+}
+
+function drawAiAction(icon: Graphics, phase: AiActivity["phase"]) {
+  icon.clear();
+  icon.circle(0, 0, 14).fill({ color: 0xffffff, alpha: 0.98 }).stroke({ color: phase === "inspecting" ? PURPLE : RED, width: 2.5 });
+  if (phase === "inspecting") {
+    icon.circle(-2, -2, 5).stroke({ color: 0x5036a8, width: 2.4 });
+    icon.moveTo(2, 2).lineTo(7, 7).stroke({ color: 0x5036a8, width: 3, cap: "round" });
+    return;
+  }
+  icon.roundRect(-6, -6, 10, 6, 2).fill({ color: 0xa13434 });
+  icon.moveTo(1, -1).lineTo(7, 8).stroke({ color: 0xa13434, width: 3.2, cap: "round" });
+}
+
+function AiActionIcon({ phase }: { phase: AiActivity["phase"] }) {
+  return phase === "inspecting" ? (
+    <svg className="ai-action-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="10" cy="10" r="5.5" /><path d="m14.3 14.3 5 5" />
+    </svg>
+  ) : (
+    <svg className="ai-action-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m5 5 7-3 3 5-7 3z" /><path d="m11 9 7 11" />
+    </svg>
+  );
 }
 
 function updateImpact(impact: Graphics, blocked: boolean, time: number) {
