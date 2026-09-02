@@ -10,7 +10,7 @@ const INNER = 0x273947;
 const PANEL = 0xf8fbfd;
 const METAL = 0xcbd5dc;
 const METAL_DARK = 0x7b8a96;
-const BLUE = 0x35a7ff;
+const FLOW_BASE = 0xffffff;
 const RED = 0xf05252;
 const INK = 0x162330;
 const MUTED = 0x72808c;
@@ -42,7 +42,8 @@ export function renderPipePiece(worldNode: WorldNode, onOpen: () => void): Piece
       drawSplitter(container, fill, worldNode);
       break;
     case "junction":
-      drawJunction(container, fill, worldNode);
+      if (worldNode.node.edges?.some((edge) => edge.kind === "branch")) drawInlineMixer(container, fill, worldNode);
+      else drawJunction(container, fill, worldNode);
       break;
     case "bypass":
       drawBypass(container, fill, worldNode);
@@ -73,21 +74,20 @@ function fallbackPiece(worldNode: WorldNode): PipePiece {
 }
 
 function drawMachine(container: Container, fill: Graphics, node: WorldNode) {
+  const cy = node.height / 2;
   const body = new Graphics();
   body.roundRect(0, 0, node.width, node.height, 24).fill({ color: PANEL });
   body.roundRect(0, 0, node.width, node.height, 24).stroke({ color: borderColor(node), width: borderWidth(node) });
   body.roundRect(10, 10, node.width - 20, 20, 10).fill({ color: node.node.status === "fault" ? 0xffe3e3 : 0xe7eef3 });
-  body.roundRect(17, 38, node.width - 34, 44, 11).fill({ color: 0xe2e8ed });
-  body.roundRect(23, 44, node.width - 46, 32, 8).fill({ color: 0xb9c5cd });
+  body.roundRect(12, cy - 17, node.width - 24, 34, 12).fill({ color: 0xd9e2e8 });
+  body.roundRect(18, cy - 11, node.width - 36, 22, 9).fill({ color: INNER });
+  body.roundRect(23, cy - 7, node.width - 46, 14, 7).fill({ color: 0x536a78 });
   container.addChild(body);
 
-  for (let index = 0; index < 3; index += 1) {
-    const vent = new Graphics();
-    vent.roundRect(34 + index * 34, 51, 18, 4, 2).fill({ color: 0x7d8b96 });
-    vent.roundRect(34 + index * 34, 61, 18, 4, 2).fill({ color: 0x7d8b96 });
-    container.addChild(vent);
-  }
-  addChannel(container, fill, node, node.height - 27, 24, node.width - 48);
+  const glass = new Graphics();
+  glass.roundRect(26, cy - 4, node.width - 52, 8, 4).fill({ color: 0x91a8b6, alpha: 0.5 });
+  container.addChild(glass);
+  addChannel(container, fill, node, cy - 6, 18, node.width - 36);
 }
 
 function drawValve(container: Container, fill: Graphics, node: WorldNode) {
@@ -117,7 +117,7 @@ function drawSplitter(container: Container, fill: Graphics, node: WorldNode) {
   body.roundRect(9, 20, node.width - 18, node.height - 30, 20).fill({ color: PANEL });
   body.roundRect(9, 20, node.width - 18, node.height - 30, 20).stroke({ color: borderColor(node), width: borderWidth(node) });
   const cx = node.width / 2;
-  const cy = node.height / 2 + 9;
+  const cy = node.height / 2;
   drawCopperBranch(body, 0, cy, cx, cy);
   drawCopperBranch(body, cx, cy, node.width - 3, cy - 28);
   drawCopperBranch(body, cx, cy, node.width - 3, cy + 28);
@@ -125,15 +125,15 @@ function drawSplitter(container: Container, fill: Graphics, node: WorldNode) {
   body.circle(cx, cy, 16).fill({ color: COPPER_LIGHT });
   container.addChild(body);
 
-  fill.moveTo(9, cy).lineTo(cx, cy).lineTo(node.width - 10, cy - 28).stroke({ color: BLUE, width: 7, alpha: 0.95 });
-  fill.moveTo(cx, cy).lineTo(node.width - 10, cy + 28).stroke({ color: BLUE, width: 7, alpha: 0.55 });
+  fill.moveTo(9, cy).lineTo(cx, cy).lineTo(node.width - 10, cy - 28).stroke({ color: FLOW_BASE, width: 7, alpha: 0.95 });
+  fill.moveTo(cx, cy).lineTo(node.width - 10, cy + 28).stroke({ color: FLOW_BASE, width: 7, alpha: 0.55 });
   fill.scale.x = 0;
 }
 
 function drawJunction(container: Container, fill: Graphics, node: WorldNode) {
   const body = new Graphics();
   const cx = node.width / 2;
-  const cy = node.height / 2 + 4;
+  const cy = node.height / 2;
   body.circle(cx, cy, 31).fill({ color: 0xffffff, alpha: 0.5 });
   body.circle(cx, cy, 31).stroke({ color: borderColor(node), width: borderWidth(node), alpha: 0.5 });
   drawCopperBranch(body, 0, cy - 22, cx - 10, cy);
@@ -143,8 +143,27 @@ function drawJunction(container: Container, fill: Graphics, node: WorldNode) {
   body.circle(cx, cy, 16).fill({ color: COPPER_LIGHT });
   body.circle(cx, cy, 8).fill({ color: PANEL });
   container.addChild(body);
-  fill.moveTo(10, cy - 22).lineTo(cx, cy).lineTo(node.width - 10, cy).stroke({ color: BLUE, width: 6 });
-  fill.moveTo(10, cy + 22).lineTo(cx, cy).stroke({ color: BLUE, width: 5, alpha: 0.5 });
+  fill.moveTo(10, cy - 22).lineTo(cx, cy).lineTo(node.width - 10, cy).stroke({ color: FLOW_BASE, width: 6 });
+  fill.moveTo(10, cy + 22).lineTo(cx, cy).stroke({ color: FLOW_BASE, width: 5, alpha: 0.5 });
+  fill.scale.x = 0;
+}
+
+function drawInlineMixer(container: Container, fill: Graphics, node: WorldNode) {
+  const body = new Graphics();
+  const cx = node.width / 2;
+  const cy = node.height / 2;
+  drawCopperBranch(body, 0, cy, node.width, cy);
+  body.circle(cx, cy, 32).fill({ color: 0xffffff, alpha: 0.58 });
+  body.circle(cx, cy, 32).stroke({ color: borderColor(node), width: borderWidth(node), alpha: 0.55 });
+  body.circle(cx, cy, 25).fill({ color: COPPER_DARK });
+  body.circle(cx, cy, 17).fill({ color: COPPER_LIGHT });
+  body.moveTo(cx - 11, cy - 10).quadraticCurveTo(cx - 2, cy, cx + 11, cy).stroke({ color: INNER, width: 5, cap: "round" });
+  body.moveTo(cx - 11, cy + 10).quadraticCurveTo(cx - 2, cy, cx + 11, cy).stroke({ color: INNER, width: 5, cap: "round" });
+  container.addChild(body);
+
+  fill.moveTo(8, cy).lineTo(cx - 13, cy).stroke({ color: FLOW_BASE, width: 6, cap: "round" });
+  fill.moveTo(cx - 10, cy - 9).quadraticCurveTo(cx - 2, cy, cx + 11, cy).lineTo(node.width - 8, cy).stroke({ color: FLOW_BASE, width: 5, cap: "round" });
+  fill.moveTo(cx - 10, cy + 9).quadraticCurveTo(cx - 2, cy, cx + 11, cy).stroke({ color: FLOW_BASE, width: 4, alpha: 0.6, cap: "round" });
   fill.scale.x = 0;
 }
 
@@ -152,15 +171,15 @@ function drawBypass(container: Container, fill: Graphics, node: WorldNode) {
   const body = new Graphics();
   body.roundRect(8, 18, node.width - 16, node.height - 28, 20).fill({ color: PANEL });
   body.roundRect(8, 18, node.width - 16, node.height - 28, 20).stroke({ color: borderColor(node), width: borderWidth(node) });
-  const cy = node.height / 2 + 14;
+  const cy = node.height / 2;
   drawCopperBranch(body, 0, cy, node.width, cy);
   body.moveTo(22, cy).bezierCurveTo(36, cy - 62, node.width - 36, cy - 62, node.width - 22, cy).stroke({ color: COPPER_DARK, width: 24 });
   body.moveTo(22, cy).bezierCurveTo(36, cy - 62, node.width - 36, cy - 62, node.width - 22, cy).stroke({ color: COPPER, width: 16 });
   body.circle(22, cy, 12).fill({ color: COPPER_LIGHT });
   body.circle(node.width - 22, cy, 12).fill({ color: COPPER_LIGHT });
   container.addChild(body);
-  fill.moveTo(10, cy).lineTo(node.width - 10, cy).stroke({ color: BLUE, width: 7 });
-  fill.moveTo(22, cy).bezierCurveTo(36, cy - 62, node.width - 36, cy - 62, node.width - 22, cy).stroke({ color: BLUE, width: 5, alpha: 0.65 });
+  fill.moveTo(10, cy).lineTo(node.width - 10, cy).stroke({ color: FLOW_BASE, width: 7 });
+  fill.moveTo(22, cy).bezierCurveTo(36, cy - 62, node.width - 36, cy - 62, node.width - 22, cy).stroke({ color: FLOW_BASE, width: 5, alpha: 0.65 });
   fill.scale.x = 0;
 }
 
@@ -169,15 +188,15 @@ function drawLoop(container: Container, fill: Graphics, node: WorldNode) {
   body.roundRect(8, 15, node.width - 16, node.height - 25, 22).fill({ color: PANEL });
   body.roundRect(8, 15, node.width - 16, node.height - 25, 22).stroke({ color: borderColor(node), width: borderWidth(node) });
   const cx = node.width / 2;
-  const cy = node.height / 2 + 9;
+  const cy = node.height / 2;
   body.circle(cx, cy, 38).stroke({ color: COPPER_DARK, width: 25 });
   body.circle(cx, cy, 38).stroke({ color: COPPER, width: 16 });
   body.moveTo(0, cy).lineTo(cx - 38, cy).stroke({ color: COPPER, width: 16 });
   body.moveTo(cx + 38, cy).lineTo(node.width, cy).stroke({ color: COPPER, width: 16 });
   container.addChild(body);
-  fill.circle(cx, cy, 38).stroke({ color: BLUE, width: 6 });
-  fill.moveTo(8, cy).lineTo(cx - 38, cy).stroke({ color: BLUE, width: 6 });
-  fill.moveTo(cx + 38, cy).lineTo(node.width - 8, cy).stroke({ color: BLUE, width: 6 });
+  fill.circle(cx, cy, 38).stroke({ color: FLOW_BASE, width: 6 });
+  fill.moveTo(8, cy).lineTo(cx - 38, cy).stroke({ color: FLOW_BASE, width: 6 });
+  fill.moveTo(cx + 38, cy).lineTo(node.width - 8, cy).stroke({ color: FLOW_BASE, width: 6 });
   fill.scale.x = 0;
 }
 
@@ -185,7 +204,7 @@ function drawBlocked(container: Container, fill: Graphics, node: WorldNode) {
   const body = new Graphics();
   body.roundRect(8, 20, node.width - 16, node.height - 30, 20).fill({ color: 0xfff4f4 });
   body.roundRect(8, 20, node.width - 16, node.height - 30, 20).stroke({ color: RED, width: 4 });
-  const cy = node.height / 2 + 12;
+  const cy = node.height / 2;
   body.moveTo(0, cy).lineTo(node.width * 0.43, cy).stroke({ color: COPPER_DARK, width: 28 });
   body.moveTo(0, cy).lineTo(node.width * 0.43, cy).stroke({ color: COPPER, width: 19 });
   body.moveTo(node.width * 0.57, cy).lineTo(node.width, cy).stroke({ color: COPPER_DARK, width: 28 });
@@ -193,7 +212,7 @@ function drawBlocked(container: Container, fill: Graphics, node: WorldNode) {
   body.moveTo(node.width * 0.46, cy - 24).lineTo(node.width * 0.54, cy + 24).stroke({ color: RED, width: 7 });
   body.moveTo(node.width * 0.54, cy - 24).lineTo(node.width * 0.46, cy + 24).stroke({ color: RED, width: 7 });
   container.addChild(body);
-  fill.moveTo(8, cy).lineTo(node.width * 0.42, cy).stroke({ color: BLUE, width: 7 });
+  fill.moveTo(8, cy).lineTo(node.width * 0.42, cy).stroke({ color: FLOW_BASE, width: 7 });
   fill.scale.x = 0;
 }
 
@@ -201,17 +220,17 @@ function drawStraight(container: Container, fill: Graphics, node: WorldNode) {
   const body = new Graphics();
   body.roundRect(8, 28, node.width - 16, node.height - 40, 18).fill({ color: PANEL });
   body.roundRect(8, 28, node.width - 16, node.height - 40, 18).stroke({ color: borderColor(node), width: borderWidth(node) });
-  const cy = node.height / 2 + 10;
+  const cy = node.height / 2;
   drawCopperBranch(body, 0, cy, node.width, cy);
   container.addChild(body);
-  fill.moveTo(8, cy).lineTo(node.width - 8, cy).stroke({ color: BLUE, width: 7 });
+  fill.moveTo(8, cy).lineTo(node.width - 8, cy).stroke({ color: FLOW_BASE, width: 7 });
   fill.scale.x = 0;
 }
 
 function addChannel(container: Container, fill: Graphics, node: WorldNode, y: number, x: number, width: number) {
   const channel = new Graphics();
   channel.roundRect(x, y, width, 12, 6).fill({ color: INNER });
-  fill.roundRect(x + 3, y + 3, width - 6, 6, 3).fill({ color: BLUE });
+  fill.roundRect(x + 3, y + 3, width - 6, 6, 3).fill({ color: FLOW_BASE });
   fill.scale.x = 0;
   container.addChild(channel, fill);
 }
@@ -232,7 +251,7 @@ function addLabels(container: Container, node: WorldNode, piece: PipePiece) {
 
   const title = new Text({
     text: node.node.label,
-    style: { fontFamily: "Inter, Arial", fontSize: 15, fontWeight: "700", fill: INK, align: "center", wordWrap: true, wordWrapWidth: node.width - 32 },
+    style: { fontFamily: "Inter, Arial", fontSize: piece === "machine" ? 13 : 15, fontWeight: "700", fill: INK, align: "center", wordWrap: true, wordWrapWidth: node.width - 32, lineHeight: piece === "machine" ? 14 : 18 },
   });
   title.anchor.set(0.5, 1);
   title.position.set(node.width / 2, node.height - 6);

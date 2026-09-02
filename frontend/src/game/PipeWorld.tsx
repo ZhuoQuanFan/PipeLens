@@ -66,6 +66,8 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
 
       const flow = new Graphics();
       camera.addChild(flow);
+      const particles = createParticles(9);
+      particles.forEach((particle) => camera.addChild(particle));
       const fills = new Map<string, Graphics>();
       layout.nodes.forEach((worldNode) => {
         const { container, fill } = renderPipePiece(worldNode, () => {
@@ -81,8 +83,6 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       camera.addChild(selection);
       const agentProbe = createAgentProbe();
       camera.addChild(agentProbe);
-      const particles = createParticles(22);
-      particles.forEach((particle) => camera.addChild(particle));
       const impact = new Graphics();
       camera.addChild(impact);
 
@@ -245,18 +245,18 @@ function redrawFlow(graphics: Graphics, layout: PipeWorldLayout, distance: numbe
 }
 
 function createParticles(count: number) {
-  return Array.from({ length: count }, (_, index) => new Graphics().circle(0, 0, 3 + (index % 3) * 0.6).fill({ color: index % 4 === 0 ? 0xb9e6ff : BLUE, alpha: 0.6 }));
+  return Array.from({ length: count }, (_, index) => new Graphics().circle(0, 0, 1.6 + (index % 3) * 0.35).fill({ color: index % 3 === 0 ? 0xd9f2ff : BLUE, alpha: 0.42 }));
 }
 
 function updateParticles(particles: Graphics[], path: WorldPoint[], head: number, total: number, blocked: boolean, time: number) {
   particles.forEach((particle, index) => {
-    const distance = head - index * 20;
+    const distance = head - index * 42;
     particle.visible = distance >= 0 && distance <= total;
     if (!particle.visible) return;
     const point = pointAtDistance(path, distance);
     particle.position.set(point.x, point.y);
     particle.scale.set(blocked ? 0.7 + Math.sin(time * 5 + index) * 0.08 : 1);
-    particle.alpha = blocked ? 0.32 : 0.58 + (index % 4) * 0.1;
+    particle.alpha = blocked ? 0.2 : 0.3 + (index % 3) * 0.08;
   });
 }
 
@@ -276,7 +276,10 @@ function updateSelection(graphics: Graphics, layout: PipeWorldLayout, selectedId
   const node = layout.nodes.find((item) => item.node.id === selectedId);
   if (!node) return;
   const pad = 6 + Math.sin(time * 3.5) * 2;
-  graphics.roundRect(node.x - pad, node.y - pad, node.width + pad * 2, node.height + pad * 2, 28).stroke({ color: PURPLE, width: 3, alpha: 0.55 });
+  const compact = node.node.piece === "junction" || node.node.piece === "valve" || node.node.piece === "straight";
+  const selectionY = compact ? node.y + 18 : node.y;
+  const selectionHeight = compact ? node.height - 22 : node.height;
+  graphics.roundRect(node.x - pad, selectionY - pad, node.width + pad * 2, selectionHeight + pad * 2, compact ? 20 : 28).stroke({ color: PURPLE, width: 3, alpha: 0.55 });
 }
 
 function createAgentProbe() {
