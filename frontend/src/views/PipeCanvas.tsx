@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { PipeNode, ScriptedAgentStep } from "../cases/nanogpt";
 import { SourceCodePanel } from "../game/SourceCodePanel";
+import type { AiActivity, PersonalWorkspace } from "../workspace/types";
 
 type Props = {
   root: PipeNode;
@@ -351,9 +352,65 @@ function AgentReplay({ steps, active, onStep }: { steps: ScriptedAgentStep[]; ac
   );
 }
 
-export function PipeInspector({ node, root, onOpen }: { node: PipeNode; root: PipeNode; onOpen: (node: PipeNode) => void }) {
+type InspectorProps = {
+  node: PipeNode;
+  root: PipeNode;
+  width: number;
+  workspace: PersonalWorkspace | null;
+  workspaceError: string | null;
+  onResize: (width: number) => void;
+  onOpen: (node: PipeNode) => void;
+  onImport: (files: FileList) => Promise<void>;
+  onUpdateFile: (path: string, content: string) => Promise<void>;
+  onAiActivity: (activity: AiActivity | null) => void;
+};
+
+export function PipeInspector({
+  node,
+  root,
+  width,
+  workspace,
+  workspaceError,
+  onResize,
+  onOpen,
+  onImport,
+  onUpdateFile,
+  onAiActivity,
+}: InspectorProps) {
+  function startResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (window.innerWidth <= 980) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = width;
+    const handleMove = (moveEvent: PointerEvent) => onResize(clampInspector(startWidth + startX - moveEvent.clientX));
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+  }
+
+  function resizeWithKeyboard(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    onResize(clampInspector(width + (event.key === "ArrowLeft" ? 24 : -24)));
+  }
+
   return (
     <aside className="pipe-inspector">
+      <div
+        className="inspector-resizer"
+        role="separator"
+        aria-label="Resize source inspector"
+        aria-orientation="vertical"
+        aria-valuemin={320}
+        aria-valuemax={760}
+        aria-valuenow={width}
+        tabIndex={0}
+        onPointerDown={startResize}
+        onKeyDown={resizeWithKeyboard}
+      />
       <div className="inspector-eyebrow">SELECTED PART</div>
       <h2>{node.label}</h2>
       <div className={`inspector-state ${node.status}`}><i />{node.status === "fault" ? "fault boundary" : node.status === "healthy" ? "normal path" : "structural"}</div>
@@ -363,7 +420,14 @@ export function PipeInspector({ node, root, onOpen }: { node: PipeNode; root: Pi
         <div><dt>symbol</dt><dd>{node.anchor?.symbol ?? "—"}</dd></div>
       </dl>
       {node.children?.length ? <button className="open-part" type="button" onClick={() => onOpen(node)}>Open component internals <span>→</span></button> : null}
-      <SourceCodePanel node={node} />
+      <SourceCodePanel
+        node={node}
+        workspace={workspace}
+        workspaceError={workspaceError}
+        onImport={onImport}
+        onUpdateFile={onUpdateFile}
+        onAiActivity={onAiActivity}
+      />
       <div className="inspector-note">
         <strong>Code-linked scope</strong>
         <p>Every selected pipe part maps to the highlighted source range above. This range is also the Search / Context / Edit boundary for the coding agent.</p>
@@ -371,4 +435,8 @@ export function PipeInspector({ node, root, onOpen }: { node: PipeNode; root: Pi
       <div className="root-summary"><span>case root</span><strong>{root.label}</strong><small>nanoGPT · model.py</small></div>
     </aside>
   );
+}
+
+function clampInspector(width: number) {
+  return Math.max(320, Math.min(760, window.innerWidth - 520, width));
 }

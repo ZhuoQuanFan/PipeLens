@@ -103,6 +103,11 @@ class Block(nn.Module):
         return logits, loss`),
 ];
 
+const demoFileLines = Array.from({ length: 193 }, () => "");
+sections.forEach((item) => item.lines.forEach((line) => { demoFileLines[line.number - 1] = line.text; }));
+
+export const nanoGptDemoSource = demoFileLines.join("\n");
+
 export function parseAnchorLines(anchor?: CodeAnchor) {
   const [startText, endText] = (anchor?.line ?? "170").split("-");
   const start = Number(startText);
@@ -110,13 +115,10 @@ export function parseAnchorLines(anchor?: CodeAnchor) {
   return { start, end };
 }
 
-export function sourceLinesFor(anchor?: CodeAnchor) {
-  const { start } = parseAnchorLines(anchor);
-  return (sections.find((item) => start >= item.start && start <= item.end) ?? sections.at(-1)!).lines;
-}
-
-export function nanoGptSourceUrl(anchor?: CodeAnchor) {
+export function sourceLinesFromFile(source: string, anchor?: CodeAnchor, padding = 12) {
+  const allLines = source.split("\n");
   const { start, end } = parseAnchorLines(anchor);
-  const suffix = end > start ? `#L${start}-L${end}` : `#L${start}`;
-  return `https://github.com/karpathy/nanoGPT/blob/master/model.py${suffix}`;
+  const windowStart = Math.max(1, start - padding);
+  const windowEnd = Math.min(allLines.length, end + padding);
+  return allLines.slice(windowStart - 1, windowEnd).map((text, index) => ({ number: windowStart + index, text }));
 }

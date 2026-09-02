@@ -11,13 +11,9 @@
 .game-app {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 430px;
+  grid-template-columns: minmax(0, 1fr) var(--inspector-width, 430px);
   background: #dfe7ed;
   color: var(--game-ink);
-}
-
-@media (max-width: 1180px) and (min-width: 981px) {
-  .game-app { grid-template-columns: minmax(0, 1fr) 370px; }
 }
 
 .game-stage {
@@ -221,6 +217,29 @@
   color: var(--game-muted);
 }
 
+.ai-worker-status {
+  position: absolute;
+  z-index: 11;
+  left: 50%;
+  top: 15px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: 1px solid rgba(135, 92, 245, .5);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 8px 25px rgba(66, 43, 128, .16);
+  color: #5036a8;
+  font-size: 9px;
+  animation: aiStatusPulse 1.2s ease-in-out infinite;
+}
+
+.ai-worker-status.editing { border-color: rgba(239, 80, 80, .48); color: #a13434; }
+.ai-worker-status span { font-size: 14px; }
+@keyframes aiStatusPulse { 50% { transform: translateX(-50%) translateY(2px); } }
+
 .game-agent-strip {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
@@ -271,7 +290,6 @@
 }
 
 @media (min-width: 1800px) {
-  .game-app { grid-template-columns: minmax(0, 1fr) 350px; }
   .game-stage { padding: 22px 26px 20px; gap: 14px; }
   .game-world-shell { min-height: 720px; }
   .game-world-hud.top-left { transform: scale(1.06); transform-origin: top left; }
@@ -279,7 +297,6 @@
 }
 
 @media (min-width: 2500px) {
-  .game-app { grid-template-columns: minmax(0, 1fr) 390px; }
   .game-world-shell { min-height: 850px; }
   .game-stage { padding: 28px 34px 24px; }
 }

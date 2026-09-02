@@ -76,3 +76,40 @@ test("agent replay and responsive resize keep a single live canvas", async ({ pa
   await expectCanvasReady(page);
   expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
 });
+
+test("resizes the inspector and stages an AI edit before applying it", async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await page.route("**/api/ai-edit", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const request = route.request().postDataJSON() as { source: string };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        updatedSource: request.source.replace("1e-5", "1e-6"),
+        summary: "Tighten the LayerNorm epsilon.",
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await expectCanvasReady(page);
+  await expect(page.getByText("PERSONAL WORKSPACE")).toBeVisible();
+  await expect(page.getByRole("link", { name: /GitHub/i })).toHaveCount(0);
+
+  const inspector = page.locator(".pipe-inspector");
+  const before = await inspector.evaluate((element) => element.getBoundingClientRect().width);
+  await page.getByRole("separator", { name: "Resize source inspector" }).press("ArrowLeft");
+  const after = await inspector.evaluate((element) => element.getBoundingClientRect().width);
+  expect(after).toBeGreaterThan(before);
+
+  await page.getByLabel("AI edit instruction").fill("Use a smaller normalization epsilon");
+  await page.getByRole("button", { name: "Ask AI to modify" }).click();
+  await expect(page.getByRole("status")).toContainText("inspecting");
+  await expect(page.getByText("Tighten the LayerNorm epsilon.")).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("editing");
+  await page.getByRole("button", { name: "Apply to workspace" }).click();
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Source code" })).toContainText("1e-6");
+  expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
+});

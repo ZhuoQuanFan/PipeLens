@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Application, Container, Graphics, Text } from "pixi.js";
 
 import type { PipeNode, ScriptedAgentStep } from "../cases/nanogpt";
+import type { AiActivity } from "../workspace/types";
 import { renderPipePiece } from "./pipePieces";
 import { layoutPipeWorld, pathMetrics, pointAtDistance, type PipeWorldLayout, type WorldNode, type WorldPoint } from "./pipeWorldModel";
 
@@ -10,6 +11,7 @@ type Props = {
   selectedId: string;
   agentSteps: ScriptedAgentStep[];
   activeAgentStep: number;
+  aiActivity: AiActivity | null;
   onSelect: (node: PipeNode) => void;
   onOpen: (node: PipeNode) => void;
 };
@@ -25,10 +27,11 @@ const PIPE_BORDER = 0x91a2ad;
 const PIPE_INNER = 0xd6e0e6;
 const BASE_FLOW_SPEED = 190;
 
-export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSelect, onOpen }: Props) {
+export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiActivity, onSelect, onOpen }: Props) {
   const hostRef = useRef<HTMLDivElement>(null!);
   const selectedRef = useRef(selectedId);
   const agentNodeRef = useRef(agentSteps[activeAgentStep]?.nodeId);
+  const aiActivityRef = useRef(aiActivity);
   const runtimeRef = useRef<Runtime>({ distance: 0, playing: true, speed: 1, follow: true, blocked: false });
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -37,6 +40,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
 
   selectedRef.current = selectedId;
   agentNodeRef.current = agentSteps[activeAgentStep]?.nodeId;
+  aiActivityRef.current = aiActivity;
   runtimeRef.current.playing = playing;
   runtimeRef.current.speed = speed;
   runtimeRef.current.follow = follow;
@@ -83,6 +87,8 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       camera.addChild(selection);
       const agentProbe = createAgentProbe();
       camera.addChild(agentProbe);
+      const aiWorker = createAiWorker();
+      camera.addChild(aiWorker);
       const impact = new Graphics();
       camera.addChild(impact);
 
@@ -145,6 +151,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
         updateFills(fills, layout, runtime.distance);
         updateSelection(selection, layout, selectedRef.current, ticker.lastTime / 1000);
         updateAgentProbe(agentProbe, layout, agentNodeRef.current, ticker.lastTime / 1000);
+        updateAiWorker(aiWorker, layout, aiActivityRef.current, ticker.lastTime / 1000);
         updateImpact(impact, runtime.blocked, ticker.lastTime / 1000);
         if (runtime.follow) {
           const point = pointAtDistance(layout.path, runtime.distance);
@@ -195,6 +202,12 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       <label><span>speed</span><select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}><option value={0.6}>0.6×</option><option value={1}>1×</option><option value={1.8}>1.8×</option><option value={3}>3×</option></select></label>
     </div>
     <div className="game-world-hud bottom-left"><span>drag to pan</span><span>wheel to zoom</span><span>click component to enter</span></div>
+    {aiActivity ? (
+      <div className={`ai-worker-status ${aiActivity.phase}`} role="status">
+        <span>{aiActivity.phase === "inspecting" ? "🔍" : "🔨"}</span>
+        <strong>DeepSeek is {aiActivity.phase}</strong>
+      </div>
+    ) : null}
     <div ref={hostRef} className={`pipe-world-host ${blockedLabel ? "blocked" : ""}`} />
   </section>;
 }
@@ -303,6 +316,37 @@ function updateAgentProbe(probe: Container, layout: PipeWorldLayout, nodeId: str
   const target = nodeId ? layout.nodes.find((item) => item.node.id === nodeId) : undefined;
   probe.visible = Boolean(target);
   if (target) probe.position.set(target.x + target.width - 5, target.y - 18 + Math.sin(time * 4) * 5);
+}
+
+type AiWorker = Container & { actionLabel: Text };
+
+function createAiWorker() {
+  const worker = new Container() as AiWorker;
+  const glow = new Graphics().circle(0, 0, 27).fill({ color: 0xffffff, alpha: 0.9 }).circle(0, 0, 27).stroke({ color: PURPLE, width: 3, alpha: 0.8 });
+  const body = new Graphics()
+    .roundRect(-12, 1, 24, 22, 9).fill({ color: 0x1e293b })
+    .circle(0, -9, 10).fill({ color: 0xf1c7a5 })
+    .circle(-4, -10, 1.2).fill({ color: 0x17202a })
+    .circle(4, -10, 1.2).fill({ color: 0x17202a });
+  const badge = new Text({ text: "DS", style: { fontFamily: "Inter, Arial", fontSize: 7, fontWeight: "900", fill: 0xffffff } });
+  badge.anchor.set(0.5);
+  badge.position.set(0, 11);
+  const actionLabel = new Text({ text: "🔍", style: { fontFamily: "Arial", fontSize: 19, fontWeight: "700", fill: 0x13202b } });
+  actionLabel.anchor.set(0.5);
+  actionLabel.position.set(23, -20);
+  worker.actionLabel = actionLabel;
+  worker.addChild(glow, body, badge, actionLabel);
+  worker.visible = false;
+  return worker;
+}
+
+function updateAiWorker(worker: AiWorker, layout: PipeWorldLayout, activity: AiActivity | null, time: number) {
+  const target = activity ? layout.nodes.find((item) => item.node.id === activity.nodeId) : undefined;
+  worker.visible = Boolean(target && activity);
+  if (!target || !activity) return;
+  worker.actionLabel.text = activity.phase === "inspecting" ? "🔍" : "🔨";
+  worker.position.set(target.x + target.width / 2, target.y - 36 + Math.sin(time * 4.6) * 4);
+  worker.rotation = Math.sin(time * 3) * 0.025;
 }
 
 function updateImpact(impact: Graphics, blocked: boolean, time: number) {

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
@@ -11,6 +11,8 @@ import {
 import { PipeGrammarLegend } from "./game/PipeGrammarLegend";
 import { PipeWorld } from "./game/PipeWorld";
 import { PipeInspector } from "./views/PipeCanvas";
+import { usePersonalWorkspace } from "./workspace/usePersonalWorkspace";
+import type { AiActivity } from "./workspace/types";
 import "./pipe.css";
 import "./gameWorld.css";
 import "./pipeGrammar.css";
@@ -19,6 +21,12 @@ function App() {
   const [focusId, setFocusId] = useState("block-6");
   const [selectedId, setSelectedId] = useState("ln1");
   const [activeAgentStep, setActiveAgentStep] = useState(3);
+  const [aiActivity, setAiActivity] = useState<AiActivity | null>(null);
+  const [inspectorWidth, setInspectorWidth] = useState(() => {
+    const saved = Number(localStorage.getItem("pipelens.inspector-width"));
+    return Number.isFinite(saved) && saved >= 320 ? Math.min(saved, 760) : 430;
+  });
+  const { workspace, workspaceError, importFiles, updateFile } = usePersonalWorkspace();
 
   const focus = useMemo(() => findPipeNode(nanoGptCase, focusId) ?? nanoGptCase, [focusId]);
   const selected = useMemo(() => findPipeNode(nanoGptCase, selectedId) ?? focus, [selectedId, focus]);
@@ -51,8 +59,12 @@ function App() {
 
   const currentAgent = nanoGptAgentReplay[activeAgentStep];
 
+  useEffect(() => {
+    localStorage.setItem("pipelens.inspector-width", String(inspectorWidth));
+  }, [inspectorWidth]);
+
   return (
-    <main className="game-app">
+    <main className="game-app" style={{ "--inspector-width": `${inspectorWidth}px` } as CSSProperties}>
       <section className="game-stage">
         <header className="game-topbar">
           <div>
@@ -83,6 +95,7 @@ function App() {
           selectedId={selected.id}
           agentSteps={nanoGptAgentReplay}
           activeAgentStep={activeAgentStep}
+          aiActivity={aiActivity}
           onSelect={selectNode}
           onOpen={openNode}
         />
@@ -109,7 +122,18 @@ function App() {
         </section>
       </section>
 
-      <PipeInspector node={selected} root={nanoGptCase} onOpen={openNode} />
+      <PipeInspector
+        node={selected}
+        root={nanoGptCase}
+        width={inspectorWidth}
+        onResize={setInspectorWidth}
+        onOpen={openNode}
+        workspace={workspace}
+        workspaceError={workspaceError}
+        onImport={importFiles}
+        onUpdateFile={updateFile}
+        onAiActivity={setAiActivity}
+      />
     </main>
   );
 }
