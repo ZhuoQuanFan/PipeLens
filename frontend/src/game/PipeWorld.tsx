@@ -20,9 +20,9 @@ const BLUE = 0x35a7ff;
 const BLUE_DARK = 0x1767ca;
 const RED = 0xf05252;
 const PURPLE = 0x8b5cf6;
-const COPPER = 0xb97942;
-const COPPER_DARK = 0x68472f;
-const PIPE_INNER = 0x273947;
+const COPPER = 0xb87942;
+const COPPER_DARK = 0x5b4a3d;
+const PIPE_INNER = 0x314653;
 const BASE_FLOW_SPEED = 190;
 
 export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSelect, onOpen }: Props) {
@@ -61,8 +61,8 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
       pixi.stage.addChild(camera);
       drawGrid(camera, layout);
       drawPipe(camera, layout.path);
-      layout.bypassPaths.forEach((bypass) => drawPipe(camera, bypass.path));
-      layout.branchPaths.forEach((branch) => drawPipe(camera, branch.path));
+      layout.bypassPaths.forEach((bypass) => drawPipe(camera, bypass.path, true));
+      layout.branchPaths.forEach((branch) => drawPipe(camera, branch.path, true));
 
       const flow = new Graphics();
       camera.addChild(flow);
@@ -201,19 +201,19 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSe
 
 function drawGrid(camera: Container, layout: PipeWorldLayout) {
   const grid = new Graphics();
-  grid.rect(0, 0, layout.width, layout.height).fill({ color: 0xdbe5ec });
-  for (let x = 0; x <= layout.width; x += 80) grid.moveTo(x, 0).lineTo(x, layout.height).stroke({ color: 0xa9bac7, width: 1, alpha: 0.2 });
-  for (let y = 0; y <= layout.height; y += 80) grid.moveTo(0, y).lineTo(layout.width, y).stroke({ color: 0xa9bac7, width: 1, alpha: 0.2 });
+  grid.rect(0, 0, layout.width, layout.height).fill({ color: 0xe4ebf0 });
+  for (let x = 0; x <= layout.width; x += 80) grid.moveTo(x, 0).lineTo(x, layout.height).stroke({ color: 0x9fb1be, width: 1, alpha: 0.13 });
+  for (let y = 0; y <= layout.height; y += 80) grid.moveTo(0, y).lineTo(layout.width, y).stroke({ color: 0x9fb1be, width: 1, alpha: 0.13 });
   camera.addChild(grid);
 }
 
-function drawPipe(camera: Container, path: WorldPoint[]) {
+function drawPipe(camera: Container, path: WorldPoint[], secondary = false) {
   const pipe = new Graphics();
-  strokePath(pipe, path, COPPER_DARK, 34, 1);
-  strokePath(pipe, path, COPPER, 27, 1);
-  strokePath(pipe, path, 0xeab680, 6, 0.58);
-  strokePath(pipe, path, PIPE_INNER, 16, 1);
-  strokePath(pipe, path, 0x425767, 4, 0.65);
+  const widths = secondary ? [20, 15, 9, 2] : [28, 22, 13, 3];
+  strokePath(pipe, path, COPPER_DARK, widths[0], secondary ? 0.72 : 0.92);
+  strokePath(pipe, path, COPPER, widths[1], secondary ? 0.78 : 0.96);
+  strokePath(pipe, path, PIPE_INNER, widths[2], 1);
+  strokePath(pipe, path, 0x70818d, widths[3], secondary ? 0.42 : 0.55);
   camera.addChild(pipe);
 }
 
@@ -231,16 +231,16 @@ function redrawFlow(graphics: Graphics, layout: PipeWorldLayout, distance: numbe
     const bypassDistance = pathMetrics(bypass.path).totalLength * progress;
     const bypassPartial = partialPath(bypass.path, bypassDistance);
     if (bypassPartial.length < 2) return;
-    strokePath(graphics, bypassPartial, BLUE_DARK, 11, 1);
-    strokePath(graphics, bypassPartial, BLUE, 6, 1);
+    strokePath(graphics, bypassPartial, BLUE_DARK, 7, 0.9);
+    strokePath(graphics, bypassPartial, BLUE, 4, 0.92);
   });
   layout.branchPaths.forEach((branch) => {
     const progress = clamp(distance / Math.max(1, branch.endDistance), 0, 1);
     const branchDistance = pathMetrics(branch.path).totalLength * progress;
     const branchPartial = partialPath(branch.path, branchDistance);
     if (branchPartial.length < 2) return;
-    strokePath(graphics, branchPartial, BLUE_DARK, 11, 1);
-    strokePath(graphics, branchPartial, BLUE, 6, 1);
+    strokePath(graphics, branchPartial, BLUE_DARK, 7, 0.9);
+    strokePath(graphics, branchPartial, BLUE, 4, 0.92);
   });
 }
 

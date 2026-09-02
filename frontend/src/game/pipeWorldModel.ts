@@ -122,9 +122,11 @@ function layoutResidualWorld(nodes: PipeNode[], bypassEdges: PipeEdge[]): PipeWo
   if (stage.length) stages.push(stage);
 
   const columns = Math.max(1, ...stages.map((items) => items.length));
-  const rowWidth = columns * NODE_WIDTH + Math.max(0, columns - 1) * X_GAP;
+  const residualXGap = 122;
+  const residualYGap = 152;
+  const rowWidth = columns * NODE_WIDTH + Math.max(0, columns - 1) * residualXGap;
   const worldWidth = WORLD_PADDING_X * 2 + rowWidth;
-  const worldHeight = WORLD_PADDING_Y * 2 + stages.length * NODE_HEIGHT + Math.max(0, stages.length - 1) * Y_GAP;
+  const worldHeight = 126 * 2 + stages.length * NODE_HEIGHT + Math.max(0, stages.length - 1) * residualYGap;
   const worldNodes: WorldNode[] = [];
   let nodeIndex = 0;
 
@@ -135,8 +137,8 @@ function layoutResidualWorld(nodes: PipeNode[], bypassEdges: PipeEdge[]): PipeWo
       worldNodes.push({
         node,
         index: nodeIndex,
-        x: WORLD_PADDING_X + centeredOffset + column * (NODE_WIDTH + X_GAP),
-        y: WORLD_PADDING_Y + row * (NODE_HEIGHT + Y_GAP),
+        x: WORLD_PADDING_X + centeredOffset + column * (NODE_WIDTH + residualXGap),
+        y: 126 + row * (NODE_HEIGHT + residualYGap),
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
       });
@@ -150,7 +152,8 @@ function layoutResidualWorld(nodes: PipeNode[], bypassEdges: PipeEdge[]): PipeWo
   const end = worldNodes.length
     ? { x: worldNodes.at(-1)!.x + NODE_WIDTH + 130, y: worldNodes.at(-1)!.y + NODE_HEIGHT / 2 }
     : { x: WORLD_PADDING_X + 300, y: WORLD_PADDING_Y };
-  const path = buildOrthogonalPath(worldNodes, start, end);
+  const stageWorldNodes = stages.map((items) => items.map((item) => worldNodes.find((node) => node.node.id === item.id)!));
+  const path = buildResidualMainPath(stageWorldNodes, start, end);
   const bypassPaths = bypassEdges.flatMap((edge) => {
     const fromNode = edge.from === "$input" ? undefined : worldNodes.find((item) => item.node.id === edge.from);
     const toNode = edge.to === "$output" ? undefined : worldNodes.find((item) => item.node.id === edge.to);
@@ -159,18 +162,16 @@ function layoutResidualWorld(nodes: PipeNode[], bypassEdges: PipeEdge[]): PipeWo
       ? { x: fromNode.x + fromNode.width / 2, y: fromNode.y + fromNode.height / 2 }
       : start;
     const to = { x: toNode.x + toNode.width / 2, y: toNode.y + toNode.height / 2 };
-    const sameRow = Math.abs(from.y - to.y) < 1;
-    const bypassPath = sameRow
+    const inputBypass = edge.from === "$input";
+    const bypassPath = inputBypass
       ? dedupePoints([
         from,
-        { x: from.x, y: from.y - 100 },
-        { x: to.x, y: to.y - 100 },
+        { x: from.x, y: from.y - 78 },
+        { x: to.x, y: to.y - 78 },
         to,
       ])
       : dedupePoints([
         from,
-        { x: Math.max(from.x, to.x) + 150, y: from.y },
-        { x: Math.max(from.x, to.x) + 150, y: to.y },
         to,
       ]);
     return [{
@@ -194,6 +195,32 @@ function layoutResidualWorld(nodes: PipeNode[], bypassEdges: PipeEdge[]): PipeWo
     height: worldHeight,
     faultIndex: nodes.findIndex((node) => node.status === "fault"),
   };
+}
+
+function buildResidualMainPath(stages: WorldNode[][], start: WorldPoint, end: WorldPoint): WorldPoint[] {
+  if (!stages.length) return [start, end];
+  const points: WorldPoint[] = [start];
+
+  stages.forEach((stage, stageIndex) => {
+    if (!stage.length) return;
+    const centers = stage.map(centerOf);
+    if (stageIndex > 0) {
+      const previousMerge = centerOf(stages[stageIndex - 1].at(-1)!);
+      const stageStart = centers[0];
+      const gutterY = (previousMerge.y + stageStart.y) / 2;
+      points.push(
+        { x: previousMerge.x, y: gutterY },
+        { x: stageStart.x, y: gutterY },
+        stageStart,
+      );
+    } else {
+      points.push(centers[0]);
+    }
+    centers.slice(1).forEach((center) => points.push(center));
+  });
+
+  points.push(end);
+  return dedupePoints(points);
 }
 
 function layoutBranchWorld(nodes: PipeNode[], branchEdges: PipeEdge[]): PipeWorldLayout {

@@ -27,9 +27,11 @@ export function renderPipePiece(worldNode: WorldNode, onOpen: () => void): Piece
   container.cursor = "pointer";
   container.on("pointertap", onOpen);
 
-  const shadow = new Graphics();
-  shadow.roundRect(8, 11, worldNode.width, worldNode.height, 24).fill({ color: 0x263746, alpha: 0.16 });
-  container.addChild(shadow);
+  if (piece === "machine" || piece === "blocked") {
+    const shadow = new Graphics();
+    shadow.roundRect(7, 9, worldNode.width, worldNode.height, 24).fill({ color: 0x263746, alpha: 0.12 });
+    container.addChild(shadow);
+  }
 
   const fill = new Graphics();
   switch (piece) {
@@ -130,18 +132,19 @@ function drawSplitter(container: Container, fill: Graphics, node: WorldNode) {
 
 function drawJunction(container: Container, fill: Graphics, node: WorldNode) {
   const body = new Graphics();
-  body.roundRect(7, 18, node.width - 14, node.height - 28, 28).fill({ color: PANEL });
-  body.roundRect(7, 18, node.width - 14, node.height - 28, 28).stroke({ color: borderColor(node), width: borderWidth(node) });
   const cx = node.width / 2;
-  const cy = node.height / 2 + 10;
-  drawCopperBranch(body, 0, cy - 26, cx - 12, cy);
-  drawCopperBranch(body, 0, cy + 26, cx - 12, cy);
-  drawCopperBranch(body, cx - 12, cy, node.width, cy);
-  body.circle(cx - 4, cy, 29).fill({ color: COPPER_DARK });
-  body.circle(cx - 4, cy, 20).fill({ color: COPPER_LIGHT });
+  const cy = node.height / 2 + 4;
+  body.circle(cx, cy, 31).fill({ color: 0xffffff, alpha: 0.5 });
+  body.circle(cx, cy, 31).stroke({ color: borderColor(node), width: borderWidth(node), alpha: 0.5 });
+  drawCopperBranch(body, 0, cy - 22, cx - 10, cy);
+  drawCopperBranch(body, 0, cy + 22, cx - 10, cy);
+  drawCopperBranch(body, cx - 10, cy, node.width, cy);
+  body.circle(cx, cy, 24).fill({ color: COPPER_DARK });
+  body.circle(cx, cy, 16).fill({ color: COPPER_LIGHT });
+  body.circle(cx, cy, 8).fill({ color: PANEL });
   container.addChild(body);
-  fill.moveTo(10, cy - 26).lineTo(cx - 4, cy).lineTo(node.width - 10, cy).stroke({ color: BLUE, width: 7 });
-  fill.moveTo(10, cy + 26).lineTo(cx - 4, cy).stroke({ color: BLUE, width: 7, alpha: 0.55 });
+  fill.moveTo(10, cy - 22).lineTo(cx, cy).lineTo(node.width - 10, cy).stroke({ color: BLUE, width: 6 });
+  fill.moveTo(10, cy + 22).lineTo(cx, cy).stroke({ color: BLUE, width: 5, alpha: 0.5 });
   fill.scale.x = 0;
 }
 
