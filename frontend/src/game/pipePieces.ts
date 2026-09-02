@@ -120,12 +120,14 @@ function drawSplitter(container: Container, fill: Graphics, node: WorldNode) {
   const cy = node.height / 2;
   drawCopperBranch(body, 0, cy, cx, cy);
   drawCopperBranch(body, cx, cy, node.width - 3, cy - 28);
+  drawCopperBranch(body, cx, cy, node.width - 3, cy);
   drawCopperBranch(body, cx, cy, node.width - 3, cy + 28);
   body.circle(cx, cy, 23).fill({ color: COPPER_DARK });
   body.circle(cx, cy, 16).fill({ color: COPPER_LIGHT });
   container.addChild(body);
 
   fill.moveTo(9, cy).lineTo(cx, cy).lineTo(node.width - 10, cy - 28).stroke({ color: FLOW_BASE, width: 7, alpha: 0.95 });
+  fill.moveTo(cx, cy).lineTo(node.width - 10, cy).stroke({ color: FLOW_BASE, width: 7, alpha: 0.75 });
   fill.moveTo(cx, cy).lineTo(node.width - 10, cy + 28).stroke({ color: FLOW_BASE, width: 7, alpha: 0.55 });
   fill.scale.x = 0;
 }

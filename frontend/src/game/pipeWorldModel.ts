@@ -38,6 +38,7 @@ export type BypassWorldPath = {
 export type BranchWorldPath = {
   id: string;
   path: WorldPoint[];
+  startDistance: number;
   endDistance: number;
 };
 
@@ -56,6 +57,7 @@ export function layoutPipeWorld(nodes: PipeNode[], edges: PipeEdge[] = []): Pipe
   const bypassEdges = edges.filter((edge) => edge.kind === "bypass");
   if (bypassEdges.length) return layoutResidualWorld(nodes, bypassEdges);
   const branchEdges = edges.filter((edge) => edge.kind === "branch");
+  if (isQkvBranchGraph(nodes, branchEdges)) return layoutQkvWorld(nodes);
   if (branchEdges.length) return layoutBranchWorld(nodes, branchEdges);
 
   const perRow = chooseWorldRowSize(nodes.length);
@@ -321,6 +323,7 @@ function layoutBranchWorld(nodes: PipeNode[], branchEdges: PipeEdge[]): PipeWorl
         { x: mergeWorldNode.x - 90, y: mergeCenter.y },
         mergeCenter,
       ]),
+      startDistance: 0,
       endDistance: mergeDistance,
     };
   });
@@ -335,6 +338,109 @@ function layoutBranchWorld(nodes: PipeNode[], branchEdges: PipeEdge[]): PipeWorl
     end,
     width: worldWidth,
     height: worldHeight,
+    faultIndex: worldNodes.findIndex((item) => item.node.status === "fault"),
+  };
+}
+
+function isQkvBranchGraph(nodes: PipeNode[], branchEdges: PipeEdge[]) {
+  const ids = new Set(nodes.map((node) => node.id));
+  return ["qkv", "q-heads", "k-heads", "v-heads", "attention-score", "weighted-value", "output-proj"]
+    .every((id) => ids.has(id))
+    && branchEdges.filter((edge) => edge.from === "qkv").length === 3;
+}
+
+/**
+ * Q, K and V are real dataflow branches: Q/K merge at score computation while
+ * V stays independent until the weighted-value junction.
+ */
+function layoutQkvWorld(nodes: PipeNode[]): PipeWorldLayout {
+  const positions: Record<string, { x: number; y: number }> = {
+    qkv: { x: 220, y: 330 },
+    "q-heads": { x: 650, y: 100 },
+    "k-heads": { x: 560, y: 330 },
+    "v-heads": { x: 650, y: 560 },
+    "attention-score": { x: 860, y: 330 },
+    "weighted-value": { x: 1180, y: 450 },
+    "output-proj": { x: 1480, y: 450 },
+  };
+  const worldNodes: WorldNode[] = nodes.map((node, index) => ({
+    node,
+    index,
+    ...(positions[node.id] ?? { x: 220 + index * (NODE_WIDTH + X_GAP), y: 330 }),
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
+  }));
+  const byId = (id: string) => worldNodes.find((item) => item.node.id === id)!;
+  const splitter = byId("qkv");
+  const qHeads = byId("q-heads");
+  const kHeads = byId("k-heads");
+  const vHeads = byId("v-heads");
+  const score = byId("attention-score");
+  const values = byId("weighted-value");
+  const output = byId("output-proj");
+  const splitterCenter = centerOf(splitter);
+  const qCenter = centerOf(qHeads);
+  const kCenter = centerOf(kHeads);
+  const vCenter = centerOf(vHeads);
+  const scoreCenter = centerOf(score);
+  const valuesCenter = centerOf(values);
+  const outputCenter = centerOf(output);
+  const splitterRight = splitter.x + splitter.width;
+  const qOutlet = { x: splitterRight, y: splitterCenter.y - 28 };
+  const kOutlet = { x: splitterRight, y: splitterCenter.y };
+  const vOutlet = { x: splitterRight, y: splitterCenter.y + 28 };
+  const start = { x: 80, y: splitterCenter.y };
+  const end = { x: output.x + output.width + 150, y: outputCenter.y };
+  const path = dedupePoints([
+    start,
+    splitterCenter,
+    qOutlet,
+    { x: 520, y: qOutlet.y },
+    { x: 520, y: qCenter.y },
+    qCenter,
+    { x: scoreCenter.x, y: qCenter.y },
+    scoreCenter,
+    { x: 1080, y: scoreCenter.y },
+    { x: 1080, y: valuesCenter.y },
+    valuesCenter,
+    outputCenter,
+    end,
+  ]);
+  const splitDistance = distanceAlongPath(path, splitterCenter);
+  const scoreDistance = distanceAlongPath(path, scoreCenter);
+  const valuesDistance = distanceAlongPath(path, valuesCenter);
+  const kPath = dedupePoints([kOutlet, kCenter, scoreCenter]);
+  const vPath = dedupePoints([
+    vOutlet,
+    { x: 520, y: vOutlet.y },
+    { x: 520, y: vCenter.y },
+    vCenter,
+    { x: valuesCenter.x, y: vCenter.y },
+    valuesCenter,
+  ]);
+  const branchPaths: BranchWorldPath[] = [
+    { id: "branch:k", path: kPath, startDistance: splitDistance, endDistance: scoreDistance },
+    { id: "branch:v", path: vPath, startDistance: splitDistance, endDistance: valuesDistance },
+  ];
+
+  splitter.flowDistance = splitDistance;
+  qHeads.flowDistance = distanceAlongPath(path, qCenter);
+  kHeads.flowDistance = splitDistance + (scoreDistance - splitDistance) * 0.55;
+  vHeads.flowDistance = splitDistance + (valuesDistance - splitDistance) * 0.55;
+  score.flowDistance = scoreDistance;
+  values.flowDistance = valuesDistance;
+  output.flowDistance = distanceAlongPath(path, outputCenter);
+  assignJunctionPorts(worldNodes, [path, kPath, vPath]);
+
+  return {
+    nodes: worldNodes,
+    path,
+    bypassPaths: [],
+    branchPaths,
+    start,
+    end,
+    width: 1_900,
+    height: 850,
     faultIndex: worldNodes.findIndex((item) => item.node.status === "fault"),
   };
 }

@@ -61,4 +61,24 @@ describe("PipeWorld semantic topology", () => {
     expect(merge?.node.piece).toBe("junction");
     expect(token?.flowDistance).toBe(position?.flowDistance);
   });
+
+  it("lays Q, K and V out as three physical paths with two semantic merges", () => {
+    const attention = findPipeNode(nanoGptCase, "attention");
+    const layout = layoutPipeWorld(attention?.children ?? [], attention?.edges);
+    const splitter = layout.nodes.find((item) => item.node.id === "qkv");
+    const q = layout.nodes.find((item) => item.node.id === "q-heads");
+    const k = layout.nodes.find((item) => item.node.id === "k-heads");
+    const v = layout.nodes.find((item) => item.node.id === "v-heads");
+    const score = layout.nodes.find((item) => item.node.id === "attention-score");
+    const values = layout.nodes.find((item) => item.node.id === "weighted-value");
+
+    expect(layout.branchPaths.map((branch) => branch.id)).toEqual(["branch:k", "branch:v"]);
+    expect(new Set([q?.y, k?.y, v?.y]).size).toBe(3);
+    expect(q?.x).toBeGreaterThan(splitter?.x ?? Number.POSITIVE_INFINITY);
+    expect(score?.ports?.sort()).toEqual(["left", "right", "top"]);
+    expect(values?.ports?.sort()).toEqual(["bottom", "left", "right"]);
+    layout.branchPaths.forEach((branch) => {
+      expect(branch.endDistance).toBeGreaterThan(branch.startDistance);
+    });
+  });
 });

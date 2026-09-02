@@ -28,7 +28,7 @@ describe("nanoGPT hard-stop replay", () => {
   });
 
   it("preserves observed healthy execution before the injected fault", () => {
-    ["wte", "block-0", "block-5", "ln1", "qkv", "reshape-heads", "qk-matmul"].forEach((nodeId) => {
+    ["wte", "block-0", "block-5", "ln1", "qkv", "q-heads", "k-heads", "v-heads", "qk-matmul"].forEach((nodeId) => {
       expect(findPipeNode(nanoGptCase, nodeId)?.status, nodeId).toBe("healthy");
     });
   });

@@ -235,7 +235,9 @@ function redrawFlow(graphics: Graphics, layout: PipeWorldLayout, distance: numbe
     strokePath(graphics, bypassPartial, BLUE, 4, 0.92);
   });
   layout.branchPaths.forEach((branch) => {
-    const progress = clamp(distance / Math.max(1, branch.endDistance), 0, 1);
+    if (distance <= branch.startDistance) return;
+    const span = Math.max(1, branch.endDistance - branch.startDistance);
+    const progress = clamp((distance - branch.startDistance) / span, 0, 1);
     const branchDistance = pathMetrics(branch.path).totalLength * progress;
     const branchPartial = partialPath(branch.path, branchDistance);
     if (branchPartial.length < 2) return;
