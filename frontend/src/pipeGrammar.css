@@ -1,4 +1,7 @@
 .pipe-grammar {
+  --grammar-pipe: #f7fafc;
+  --grammar-pipe-edge: #91a2ad;
+  --grammar-pipe-core: #d2dde3;
   display: grid;
   grid-template-columns: 195px minmax(0, 1fr);
   align-items: center;
@@ -82,13 +85,14 @@
 }
 .pipe-grammar-icon.machine::after {
   left: 0; right: 0; top: 10px; height: 5px;
-  background: #b97942;
-  box-shadow: inset 0 1px #e6b17b;
+  background: var(--grammar-pipe);
+  box-shadow: inset 0 0 0 1px var(--grammar-pipe-edge);
 }
 
 .pipe-grammar-icon.valve::before {
   left: 3px; right: 3px; top: 10px; height: 5px;
-  background: #b97942;
+  background: var(--grammar-pipe);
+  box-shadow: inset 0 0 0 1px var(--grammar-pipe-edge);
 }
 .pipe-grammar-icon.valve::after {
   width: 14px; height: 14px; left: 9px; top: 2px;
@@ -97,40 +101,40 @@
 }
 
 .pipe-grammar-icon.splitter::before {
-  left: 1px; top: 10px; width: 15px; height: 5px; background: #b97942;
+  left: 1px; top: 10px; width: 15px; height: 5px; background: var(--grammar-pipe); box-shadow: inset 0 0 0 1px var(--grammar-pipe-edge);
 }
 .pipe-grammar-icon.splitter::after {
-  left: 14px; top: 5px; width: 17px; height: 5px; background: #b97942; transform: rotate(-24deg); transform-origin: left center;
-  box-shadow: 0 10px 0 #b97942;
+  left: 14px; top: 5px; width: 17px; height: 5px; background: var(--grammar-pipe); transform: rotate(-24deg); transform-origin: left center;
+  box-shadow: 0 10px 0 var(--grammar-pipe);
 }
 .pipe-grammar-icon.splitter b::before {
-  width: 9px; height: 9px; left: 12px; top: 8px; background: #dca46c; border-radius: 50%;
+  width: 9px; height: 9px; left: 12px; top: 8px; background: var(--grammar-pipe-core); border: 1px solid var(--grammar-pipe-edge); border-radius: 50%;
 }
 
 .pipe-grammar-icon.junction::before {
-  left: 1px; top: 5px; width: 18px; height: 5px; background: #b97942; transform: rotate(20deg); transform-origin: right center;
-  box-shadow: 0 10px 0 #b97942;
+  left: 1px; top: 5px; width: 18px; height: 5px; background: var(--grammar-pipe); transform: rotate(20deg); transform-origin: right center;
+  box-shadow: 0 10px 0 var(--grammar-pipe);
 }
 .pipe-grammar-icon.junction::after {
-  left: 15px; top: 10px; width: 16px; height: 5px; background: #b97942;
+  left: 15px; top: 10px; width: 16px; height: 5px; background: var(--grammar-pipe); box-shadow: inset 0 0 0 1px var(--grammar-pipe-edge);
 }
 .pipe-grammar-icon.junction b::before {
-  width: 10px; height: 10px; left: 12px; top: 8px; background: #dca46c; border-radius: 50%;
+  width: 10px; height: 10px; left: 12px; top: 8px; background: var(--grammar-pipe-core); border: 1px solid var(--grammar-pipe-edge); border-radius: 50%;
 }
 
 .pipe-grammar-icon.bypass::before {
-  left: 1px; right: 1px; top: 12px; height: 5px; background: #b97942;
+  left: 1px; right: 1px; top: 12px; height: 5px; background: var(--grammar-pipe); box-shadow: inset 0 0 0 1px var(--grammar-pipe-edge);
 }
 .pipe-grammar-icon.bypass::after {
   width: 22px; height: 14px; left: 5px; top: 2px;
-  border: 4px solid #b97942;
+  border: 4px solid var(--grammar-pipe-edge);
   border-bottom: 0;
   border-radius: 14px 14px 0 0;
 }
 
 .pipe-grammar-icon.blocked::before {
-  left: 1px; width: 12px; top: 10px; height: 5px; background: #b97942;
-  box-shadow: 19px 0 0 #b97942;
+  left: 1px; width: 12px; top: 10px; height: 5px; background: var(--grammar-pipe);
+  box-shadow: inset 0 0 0 1px var(--grammar-pipe-edge), 19px 0 0 var(--grammar-pipe);
 }
 .pipe-grammar-icon.blocked::after {
   width: 4px; height: 20px; left: 14px; top: 2px; background: #ef5050; transform: rotate(42deg);

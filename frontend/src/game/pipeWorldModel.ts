@@ -1,6 +1,7 @@
 import type { PipeEdge, PipeNode } from "../cases/nanogpt";
 
 export type WorldPoint = { x: number; y: number };
+export type PipePortDirection = "left" | "right" | "top" | "bottom";
 
 export type WorldNode = {
   node: PipeNode;
@@ -10,6 +11,7 @@ export type WorldNode = {
   width: number;
   height: number;
   flowDistance?: number;
+  ports?: PipePortDirection[];
 };
 
 export type PipeWorldLayout = {
@@ -183,6 +185,7 @@ function layoutResidualWorld(nodes: PipeNode[], bypassEdges: PipeEdge[]): PipeWo
       endDistance: distanceAlongPath(path, to),
     }];
   });
+  assignJunctionPorts(worldNodes, [path, ...bypassPaths.map((bypass) => bypass.path)]);
 
   return {
     nodes: worldNodes,
@@ -205,11 +208,14 @@ function buildResidualMainPath(stages: WorldNode[][], start: WorldPoint, end: Wo
     if (!stage.length) return;
     const centers = stage.map(centerOf);
     if (stageIndex > 0) {
-      const previousMerge = centerOf(stages[stageIndex - 1].at(-1)!);
+      const previousMergeNode = stages[stageIndex - 1].at(-1)!;
+      const previousMerge = centerOf(previousMergeNode);
       const stageStart = centers[0];
       const gutterY = (previousMerge.y + stageStart.y) / 2;
+      const transitionX = previousMergeNode.x + previousMergeNode.width + 72;
       points.push(
-        { x: previousMerge.x, y: gutterY },
+        { x: transitionX, y: previousMerge.y },
+        { x: transitionX, y: gutterY },
         { x: stageStart.x, y: gutterY },
         stageStart,
       );
@@ -221,6 +227,35 @@ function buildResidualMainPath(stages: WorldNode[][], start: WorldPoint, end: Wo
 
   points.push(end);
   return dedupePoints(points);
+}
+
+function assignJunctionPorts(worldNodes: WorldNode[], paths: WorldPoint[][]) {
+  worldNodes.forEach((worldNode) => {
+    if (worldNode.node.piece !== "junction") return;
+    const center = centerOf(worldNode);
+    const ports = new Set<PipePortDirection>();
+    paths.forEach((path) => {
+      path.forEach((point, index) => {
+        if (!samePoint(point, center)) return;
+        const previous = path[index - 1];
+        const next = path[index + 1];
+        if (previous) ports.add(portDirection(center, previous));
+        if (next) ports.add(portDirection(center, next));
+      });
+    });
+    worldNode.ports = [...ports];
+  });
+}
+
+function samePoint(left: WorldPoint, right: WorldPoint) {
+  return Math.abs(left.x - right.x) < 0.5 && Math.abs(left.y - right.y) < 0.5;
+}
+
+function portDirection(center: WorldPoint, adjacent: WorldPoint): PipePortDirection {
+  const dx = adjacent.x - center.x;
+  const dy = adjacent.y - center.y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? "left" : "right";
+  return dy < 0 ? "top" : "bottom";
 }
 
 function layoutBranchWorld(nodes: PipeNode[], branchEdges: PipeEdge[]): PipeWorldLayout {

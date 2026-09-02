@@ -24,8 +24,18 @@ describe("PipeWorld semantic topology", () => {
     const secondMerge = layout.nodes.find((item) => item.node.id === "residual-2");
     const secondBypass = layout.bypassPaths.find((item) => item.from === "residual-1");
     expect(firstMerge?.x).toBe(secondMerge?.x);
+    expect(firstMerge?.ports?.sort()).toEqual(["bottom", "left", "right", "top"]);
+    expect(secondMerge?.ports?.sort()).toEqual(["left", "right", "top"]);
     expect(secondBypass?.path).toHaveLength(2);
     expect(secondBypass?.path[0].x).toBe(secondBypass?.path[1].x);
+
+    const firstMergeCenter = {
+      x: (firstMerge?.x ?? 0) + (firstMerge?.width ?? 0) / 2,
+      y: (firstMerge?.y ?? 0) + (firstMerge?.height ?? 0) / 2,
+    };
+    const mainExit = layout.path.findIndex((point) => point.x === firstMergeCenter.x && point.y === firstMergeCenter.y);
+    expect(layout.path[mainExit + 1]?.x).toBeGreaterThan(firstMergeCenter.x);
+    expect(secondBypass?.path[1]?.y).toBeGreaterThan(secondBypass?.path[0]?.y ?? Number.POSITIVE_INFINITY);
   });
 
   it("keeps linear cases backward compatible when no semantic edges are provided", () => {

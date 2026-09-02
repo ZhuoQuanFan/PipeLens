@@ -1,12 +1,12 @@
 import { Container, Graphics, Text } from "pixi.js";
 
 import type { PipePiece } from "../cases/nanogpt";
-import type { WorldNode } from "./pipeWorldModel";
+import type { PipePortDirection, WorldNode } from "./pipeWorldModel";
 
-const COPPER = 0xb97942;
-const COPPER_LIGHT = 0xe5ae74;
-const COPPER_DARK = 0x68472f;
-const INNER = 0x273947;
+const COPPER = 0xf3f7f9;
+const COPPER_LIGHT = 0xffffff;
+const COPPER_DARK = 0x91a2ad;
+const INNER = 0xd2dde3;
 const PANEL = 0xf8fbfd;
 const METAL = 0xcbd5dc;
 const METAL_DARK = 0x7b8a96;
@@ -81,7 +81,7 @@ function drawMachine(container: Container, fill: Graphics, node: WorldNode) {
   body.roundRect(10, 10, node.width - 20, 20, 10).fill({ color: node.node.status === "fault" ? 0xffe3e3 : 0xe7eef3 });
   body.roundRect(12, cy - 17, node.width - 24, 34, 12).fill({ color: 0xd9e2e8 });
   body.roundRect(18, cy - 11, node.width - 36, 22, 9).fill({ color: INNER });
-  body.roundRect(23, cy - 7, node.width - 46, 14, 7).fill({ color: 0x536a78 });
+  body.roundRect(23, cy - 7, node.width - 46, 14, 7).fill({ color: 0xb5c3cc });
   container.addChild(body);
 
   const glass = new Graphics();
@@ -134,18 +134,31 @@ function drawJunction(container: Container, fill: Graphics, node: WorldNode) {
   const body = new Graphics();
   const cx = node.width / 2;
   const cy = node.height / 2;
+  const ports: PipePortDirection[] = node.ports?.length ? node.ports : ["left", "right"];
   body.circle(cx, cy, 31).fill({ color: 0xffffff, alpha: 0.5 });
   body.circle(cx, cy, 31).stroke({ color: borderColor(node), width: borderWidth(node), alpha: 0.5 });
-  drawCopperBranch(body, 0, cy - 22, cx - 10, cy);
-  drawCopperBranch(body, 0, cy + 22, cx - 10, cy);
-  drawCopperBranch(body, cx - 10, cy, node.width, cy);
+  ports.forEach((port) => {
+    const point = portPoint(node, port);
+    drawCopperBranch(body, point.x, point.y, cx, cy);
+  });
   body.circle(cx, cy, 24).fill({ color: COPPER_DARK });
   body.circle(cx, cy, 16).fill({ color: COPPER_LIGHT });
-  body.circle(cx, cy, 8).fill({ color: PANEL });
+  body.circle(cx, cy, 8).fill({ color: INNER });
   container.addChild(body);
-  fill.moveTo(10, cy - 22).lineTo(cx, cy).lineTo(node.width - 10, cy).stroke({ color: FLOW_BASE, width: 6 });
-  fill.moveTo(10, cy + 22).lineTo(cx, cy).stroke({ color: FLOW_BASE, width: 5, alpha: 0.5 });
-  fill.scale.x = 0;
+  ports.forEach((port) => {
+    const point = portPoint(node, port, 9);
+    fill.moveTo(point.x, point.y).lineTo(cx, cy).stroke({ color: FLOW_BASE, width: 5, alpha: port === "right" ? 0.9 : 0.72, cap: "round" });
+  });
+  fill.alpha = 0;
+}
+
+function portPoint(node: WorldNode, port: PipePortDirection, inset = 0) {
+  const cx = node.width / 2;
+  const cy = node.height / 2;
+  if (port === "left") return { x: inset, y: cy };
+  if (port === "right") return { x: node.width - inset, y: cy };
+  if (port === "top") return { x: cx, y: inset };
+  return { x: cx, y: node.height - inset };
 }
 
 function drawInlineMixer(container: Container, fill: Graphics, node: WorldNode) {
@@ -236,9 +249,9 @@ function addChannel(container: Container, fill: Graphics, node: WorldNode, y: nu
 }
 
 function drawCopperBranch(graphics: Graphics, x1: number, y1: number, x2: number, y2: number) {
-  graphics.moveTo(x1, y1).lineTo(x2, y2).stroke({ color: COPPER_DARK, width: 29 });
+  graphics.moveTo(x1, y1).lineTo(x2, y2).stroke({ color: COPPER_DARK, width: 27 });
   graphics.moveTo(x1, y1).lineTo(x2, y2).stroke({ color: COPPER, width: 20 });
-  graphics.moveTo(x1, y1 - 4).lineTo(x2, y2 - 4).stroke({ color: COPPER_LIGHT, width: 4, alpha: 0.6 });
+  graphics.moveTo(x1, y1 - 4).lineTo(x2, y2 - 4).stroke({ color: COPPER_LIGHT, width: 4, alpha: 0.72 });
 }
 
 function addLabels(container: Container, node: WorldNode, piece: PipePiece) {

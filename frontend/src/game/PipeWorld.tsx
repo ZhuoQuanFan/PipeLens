@@ -20,9 +20,9 @@ const BLUE = 0x35a7ff;
 const BLUE_DARK = 0x1767ca;
 const RED = 0xf05252;
 const PURPLE = 0x8b5cf6;
-const COPPER = 0xb87942;
-const COPPER_DARK = 0x5b4a3d;
-const PIPE_INNER = 0x314653;
+const PIPE_BODY = 0xf7fafc;
+const PIPE_BORDER = 0x91a2ad;
+const PIPE_INNER = 0xd6e0e6;
 const BASE_FLOW_SPEED = 190;
 
 export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, onSelect, onOpen }: Props) {
@@ -209,11 +209,11 @@ function drawGrid(camera: Container, layout: PipeWorldLayout) {
 
 function drawPipe(camera: Container, path: WorldPoint[], secondary = false) {
   const pipe = new Graphics();
-  const widths = secondary ? [20, 15, 9, 2] : [28, 22, 13, 3];
-  strokePath(pipe, path, COPPER_DARK, widths[0], secondary ? 0.72 : 0.92);
-  strokePath(pipe, path, COPPER, widths[1], secondary ? 0.78 : 0.96);
+  const widths = secondary ? [25, 19, 11, 3] : [30, 24, 14, 3];
+  strokePath(pipe, path, PIPE_BORDER, widths[0], secondary ? 0.82 : 0.96);
+  strokePath(pipe, path, PIPE_BODY, widths[1], 1);
   strokePath(pipe, path, PIPE_INNER, widths[2], 1);
-  strokePath(pipe, path, 0x70818d, widths[3], secondary ? 0.42 : 0.55);
+  strokePath(pipe, path, 0xffffff, widths[3], secondary ? 0.48 : 0.68);
   camera.addChild(pipe);
 }
 
@@ -266,7 +266,12 @@ function updateFills(fills: Map<string, Graphics>, layout: PipeWorldLayout, dist
     if (!fill) return;
     const center = worldNode.flowDistance ?? distanceTo(layout.path, { x: worldNode.x + worldNode.width / 2, y: worldNode.y + worldNode.height / 2 });
     const progress = clamp((distance - center + 65) / 130, 0, 1);
-    fill.scale.x = progress;
+    if (worldNode.ports?.length) {
+      fill.scale.x = 1;
+      fill.alpha = progress;
+    } else {
+      fill.scale.x = progress;
+    }
     fill.tint = worldNode.node.status === "fault" && progress > 0.45 ? RED : BLUE;
   });
 }
