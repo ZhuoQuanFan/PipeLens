@@ -26,6 +26,61 @@ function json(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function parseEdit(content) {
+  if (typeof content !== "string" || !content.trim()) return null;
+  const normalized = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    const parsed = JSON.parse(normalized);
+    if (typeof parsed.replacement_source !== "string" || typeof parsed.summary !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function requestEdit(apiKey, prompt, retry = false) {
+  const upstream = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(24_000),
+    body: JSON.stringify({
+      model: "deepseek-v4-flash",
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are PipeLens, a precise coding agent. Modify only the selected source.",
+            "Reply as one complete JSON object and never use markdown fences.",
+            "Example JSON: {\"replacement_source\":\"exact replacement text\",\"summary\":\"short explanation\"}",
+          ].join(" "),
+        },
+        { role: "user", content: retry ? `${prompt}\n\nYour previous JSON response was empty or incomplete. Return the complete minimal JSON object now.` : prompt },
+      ],
+      response_format: { type: "json_object" },
+      thinking: { type: "disabled" },
+      temperature: 0.1,
+      max_tokens: 4_096,
+      stream: false,
+    }),
+  });
+  const rawPayload = await upstream.text();
+  let payload;
+  try {
+    payload = JSON.parse(rawPayload);
+  } catch {
+    if (upstream.ok) return null;
+    const error = new Error("DeepSeek returned an unreadable response. Please try again.");
+    error.status = upstream.status;
+    throw error;
+  }
+  if (!upstream.ok) {
+    const error = new Error(payload?.error?.message ?? "DeepSeek request failed.");
+    error.status = upstream.status;
+    throw error;
+  }
+  return parseEdit(payload?.choices?.[0]?.message?.content);
+}
+
 export default async function handler(request, response) {
   if (request.method !== "POST") return json(response, 405, { error: "Method not allowed" });
   if (!allowedOrigin(request.headers.origin)) return json(response, 403, { error: "Origin not allowed" });
@@ -52,31 +107,14 @@ export default async function handler(request, response) {
   ].filter(Boolean).join("\n\n");
 
   try {
-    const upstream = await fetch("https://api.deepseek.com/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "deepseek-v4-flash",
-        messages: [
-          { role: "system", content: "You are PipeLens, a precise coding agent. Reply as one JSON object with string fields replacement_source and summary. Never use markdown fences. Modify only the selected source." },
-          { role: "user", content: prompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-        max_tokens: 2_048,
-        stream: false,
-      }),
-    });
-    const payload = await upstream.json();
-    if (!upstream.ok) return json(response, upstream.status, { error: payload?.error?.message ?? "DeepSeek request failed." });
-    const raw = payload?.choices?.[0]?.message?.content;
-    if (typeof raw !== "string") return json(response, 502, { error: "DeepSeek returned no editable source." });
-    const parsed = JSON.parse(raw);
-    if (typeof parsed.replacement_source !== "string" || typeof parsed.summary !== "string") {
-      return json(response, 502, { error: "DeepSeek returned an invalid edit response." });
-    }
+    const parsed = await requestEdit(apiKey, prompt) ?? await requestEdit(apiKey, prompt, true);
+    if (!parsed) return json(response, 502, { error: "AI returned an incomplete edit twice. Please make the instruction more specific and try again." });
     return json(response, 200, { replacementSource: parsed.replacement_source, summary: parsed.summary, model: "deepseek-v4-flash" });
   } catch (error) {
-    return json(response, 502, { error: error instanceof Error ? error.message : "DeepSeek request failed." });
+    const status = Number.isInteger(error?.status) ? error.status : 502;
+    const message = error?.name === "TimeoutError"
+      ? "AI request timed out. Please try a more specific instruction."
+      : error instanceof Error ? error.message : "DeepSeek request failed.";
+    return json(response, status, { error: message });
   }
 }

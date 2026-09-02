@@ -72,6 +72,8 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiAc
       camera.addChild(flow);
       const particles = createParticles(9);
       particles.forEach((particle) => camera.addChild(particle));
+      const impact = new Graphics();
+      camera.addChild(impact);
       const fills = new Map<string, Graphics>();
       layout.nodes.forEach((worldNode) => {
         const { container, fill } = renderPipePiece(worldNode, () => {
@@ -89,8 +91,6 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiAc
       camera.addChild(agentProbe);
       const aiWorker = createAiWorker();
       camera.addChild(aiWorker);
-      const impact = new Graphics();
-      camera.addChild(impact);
 
       const metrics = pathMetrics(layout.path);
       const faultDistance = computeFaultDistance(layout);
@@ -315,7 +315,7 @@ function createAgentProbe() {
 function updateAgentProbe(probe: Container, layout: PipeWorldLayout, nodeId: string | undefined, time: number) {
   const target = nodeId ? layout.nodes.find((item) => item.node.id === nodeId) : undefined;
   probe.visible = Boolean(target);
-  if (target) probe.position.set(target.x + target.width - 5, target.y - 18 + Math.sin(time * 4) * 5);
+  if (target) probe.position.set(target.x + target.width / 2, target.y - 25 + Math.sin(time * 4) * 4);
 }
 
 type AiWorker = Container & { actionIcon: Graphics };

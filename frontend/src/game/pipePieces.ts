@@ -217,15 +217,16 @@ function drawLoop(container: Container, fill: Graphics, node: WorldNode) {
 
 function drawBlocked(container: Container, fill: Graphics, node: WorldNode) {
   const body = new Graphics();
-  body.roundRect(8, 20, node.width - 16, node.height - 30, 20).fill({ color: 0xfff4f4 });
-  body.roundRect(8, 20, node.width - 16, node.height - 30, 20).stroke({ color: RED, width: 4 });
+  body.roundRect(8, 14, node.width - 16, node.height - 48, 20).fill({ color: 0xfff4f4 });
+  body.roundRect(8, 14, node.width - 16, node.height - 48, 20).stroke({ color: RED, width: 4 });
   const cy = node.height / 2;
   body.moveTo(0, cy).lineTo(node.width * 0.43, cy).stroke({ color: COPPER_DARK, width: 28 });
   body.moveTo(0, cy).lineTo(node.width * 0.43, cy).stroke({ color: COPPER, width: 19 });
   body.moveTo(node.width * 0.57, cy).lineTo(node.width, cy).stroke({ color: COPPER_DARK, width: 28 });
   body.moveTo(node.width * 0.57, cy).lineTo(node.width, cy).stroke({ color: COPPER, width: 19 });
-  body.moveTo(node.width * 0.46, cy - 24).lineTo(node.width * 0.54, cy + 24).stroke({ color: RED, width: 7 });
-  body.moveTo(node.width * 0.54, cy - 24).lineTo(node.width * 0.46, cy + 24).stroke({ color: RED, width: 7 });
+  body.circle(node.width / 2, cy, 22).fill({ color: RED, alpha: 0.14 }).stroke({ color: RED, width: 3, alpha: 0.55 });
+  body.moveTo(node.width * 0.46, cy - 19).lineTo(node.width * 0.54, cy + 19).stroke({ color: RED, width: 6, cap: "round" });
+  body.moveTo(node.width * 0.54, cy - 19).lineTo(node.width * 0.46, cy + 19).stroke({ color: RED, width: 6, cap: "round" });
   container.addChild(body);
   fill.moveTo(8, cy).lineTo(node.width * 0.42, cy).stroke({ color: FLOW_BASE, width: 7 });
   fill.scale.x = 0;
@@ -265,12 +266,16 @@ function addLabels(container: Container, node: WorldNode, piece: PipePiece) {
   container.addChild(pieceLabel);
 
   const title = new Text({
-    text: node.node.label,
-    style: { fontFamily: "Inter, Arial", fontSize: piece === "machine" ? 13 : 15, fontWeight: "700", fill: INK, align: "center", wordWrap: true, wordWrapWidth: node.width - 32, lineHeight: piece === "machine" ? 14 : 18 },
+    text: canvasLabel(node.node.label),
+    style: { fontFamily: "Inter, Arial", fontSize: piece === "machine" ? 13 : piece === "blocked" ? 13 : 15, fontWeight: "700", fill: INK, align: "center", wordWrap: true, wordWrapWidth: node.width - 32, lineHeight: piece === "machine" ? 14 : 18 },
   });
   title.anchor.set(0.5, 1);
   title.position.set(node.width / 2, node.height - 6);
   container.addChild(title);
+}
+
+function canvasLabel(label: string) {
+  return label.replace("√dₖ", "sqrt(d_k)");
 }
 
 function addFaultBadge(container: Container, node: WorldNode) {
