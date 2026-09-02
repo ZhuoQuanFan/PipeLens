@@ -7,6 +7,9 @@
   "functions": {
     "api/ai-edit.mjs": {
       "maxDuration": 60
+    },
+    "api/run-python.py": {
+      "maxDuration": 10
     }
   }
 }

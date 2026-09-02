@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Application, Container, Graphics, Text } from "pixi.js";
 
 import type { PipeNode, ScriptedAgentStep } from "../cases/nanogpt";
+import type { ExecutionState } from "../execution/types";
 import type { AiActivity } from "../workspace/types";
 import { renderPipePiece } from "./pipePieces";
 import { layoutPipeWorld, pathMetrics, pointAtDistance, type PipeWorldLayout, type WorldNode, type WorldPoint } from "./pipeWorldModel";
@@ -12,6 +13,8 @@ type Props = {
   agentSteps: ScriptedAgentStep[];
   activeAgentStep: number;
   aiActivity: AiActivity | null;
+  execution: ExecutionState;
+  onRestart: () => Promise<void>;
   onSelect: (node: PipeNode) => void;
   onOpen: (node: PipeNode) => void;
 };
@@ -27,7 +30,7 @@ const PIPE_BORDER = 0x91a2ad;
 const PIPE_INNER = 0xd6e0e6;
 const BASE_FLOW_SPEED = 190;
 
-export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiActivity, onSelect, onOpen }: Props) {
+export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiActivity, execution, onRestart, onSelect, onOpen }: Props) {
   const hostRef = useRef<HTMLDivElement>(null!);
   const selectedRef = useRef(selectedId);
   const agentNodeRef = useRef(agentSteps[activeAgentStep]?.nodeId);
@@ -95,8 +98,9 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiAc
       const metrics = pathMetrics(layout.path);
       const faultDistance = computeFaultDistance(layout);
       const endDistance = faultDistance ?? metrics.totalLength;
-      runtimeRef.current = { distance: 0, playing: true, speed, follow: true, blocked: false };
-      setPlaying(true);
+      const startsPlaying = execution.status !== "running";
+      runtimeRef.current = { distance: 0, playing: startsPlaying, speed, follow: true, blocked: false };
+      setPlaying(startsPlaying);
       setFollow(true);
       setBlockedLabel(null);
       fitCamera(camera, pixi, layout);
@@ -146,7 +150,7 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiAc
             }
           }
         }
-        redrawFlow(flow, layout, runtime.distance);
+        redrawFlow(flow, layout, runtime.distance, faultDistance);
         updateParticles(particles, layout.path, runtime.distance, metrics.totalLength, runtime.blocked, ticker.lastTime / 1000);
         updateFills(fills, layout, runtime.distance);
         updateSelection(selection, layout, selectedRef.current, ticker.lastTime / 1000);
@@ -183,24 +187,34 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiAc
       app?.destroy(true);
       hostElement.innerHTML = "";
     };
-  }, [focus.id, onOpen, onSelect]);
+  }, [execution.runId, execution.status, focus.id, onOpen, onSelect]);
 
-  function restart() {
+  async function restart() {
     runtimeRef.current.distance = 0;
     runtimeRef.current.blocked = false;
-    runtimeRef.current.playing = true;
+    runtimeRef.current.playing = false;
     setBlockedLabel(null);
-    setPlaying(true);
+    setPlaying(false);
+    await onRestart();
   }
+
+  const executionLabel = execution.status === "running"
+    ? "PYTHON RUNNING · model.py:L67"
+    : execution.status === "passed"
+      ? `PYTHON PASS · L${execution.line} · ${execution.durationMs}ms`
+      : execution.status === "failed" || execution.status === "error"
+        ? `PYTHON ${execution.status.toUpperCase()} · ${"line" in execution ? `L${execution.line}` : "runner"}`
+        : execution.status === "stale" ? "CODE CHANGED · RESTART TO VERIFY" : null;
 
   return <section className="game-world-shell">
     <div className="game-world-hud top-left"><span className="hud-kicker">PIPEWORLD · PIXIJS</span><strong>{blockedLabel ? `FLOW BLOCKED · ${blockedLabel}` : playing ? "EXECUTION RUNNING" : "EXECUTION PAUSED"}</strong></div>
     <div className="game-world-hud controls">
-      <button type="button" onClick={() => blockedLabel ? restart() : setPlaying((value) => !value)}>{blockedLabel ? "Replay" : playing ? "Pause" : "Play"}</button>
-      <button type="button" onClick={restart}>Restart</button>
+      <button type="button" disabled={execution.status === "running"} onClick={() => blockedLabel ? void restart() : setPlaying((value) => !value)}>{blockedLabel ? "Replay" : playing ? "Pause" : "Play"}</button>
+      <button type="button" disabled={execution.status === "running"} onClick={() => void restart()}>{execution.status === "running" ? "Running Python…" : "Restart"}</button>
       <button type="button" className={follow ? "active" : ""} onClick={() => setFollow((value) => !value)}>Follow</button>
       <label><span>speed</span><select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}><option value={0.6}>0.6×</option><option value={1}>1×</option><option value={1.8}>1.8×</option><option value={3}>3×</option></select></label>
     </div>
+    {executionLabel ? <div className={`python-run-badge ${execution.status}`} role="status"><span>PY</span><strong>{executionLabel}</strong><small>{execution.summary}</small></div> : null}
     <div className="game-world-hud bottom-left"><span>drag to pan</span><span>wheel to zoom</span><span>click component to enter</span></div>
     {aiActivity ? (
       <div className={`ai-worker-status ${aiActivity.phase}`} role="status">
@@ -230,12 +244,17 @@ function drawPipe(camera: Container, path: WorldPoint[], secondary = false) {
   camera.addChild(pipe);
 }
 
-function redrawFlow(graphics: Graphics, layout: PipeWorldLayout, distance: number) {
+function redrawFlow(graphics: Graphics, layout: PipeWorldLayout, distance: number, faultDistance: number | null) {
   graphics.clear();
   const partial = partialPath(layout.path, distance);
   if (partial.length >= 2) {
     strokePath(graphics, partial, BLUE_DARK, 11, 1);
     strokePath(graphics, partial, BLUE, 6, 1);
+  }
+  if (faultDistance != null && distance > faultDistance - 105) {
+    const abnormal = pathSlice(layout.path, Math.max(0, faultDistance - 105), Math.min(distance, faultDistance));
+    strokePath(graphics, abnormal, 0xa9232b, 11, 1);
+    strokePath(graphics, abnormal, RED, 6, 1);
   }
   layout.bypassPaths.forEach((bypass) => {
     if (distance <= bypass.startDistance) return;
@@ -423,6 +442,21 @@ function partialPath(path: WorldPoint[], distance: number) {
     }
     break;
   }
+  return result;
+}
+
+function pathSlice(path: WorldPoint[], fromDistance: number, toDistance: number) {
+  if (path.length < 2 || toDistance <= fromDistance) return [];
+  const result: WorldPoint[] = [pointAtDistance(path, fromDistance)];
+  let walked = 0;
+  for (let index = 1; index < path.length; index += 1) {
+    const start = path[index - 1];
+    const end = path[index];
+    walked += Math.hypot(end.x - start.x, end.y - start.y);
+    if (walked > fromDistance && walked < toDistance) result.push(end);
+    if (walked >= toDistance) break;
+  }
+  result.push(pointAtDistance(path, toDistance));
   return result;
 }
 

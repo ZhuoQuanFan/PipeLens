@@ -8,6 +8,9 @@ import {
   nanoGptCase,
   type PipeNode,
 } from "./cases/nanogpt";
+import { runPythonWorkspace } from "./api/execution";
+import { caseFromExecution } from "./execution/runtimeCase";
+import type { ExecutionState } from "./execution/types";
 import { PipeGrammarLegend } from "./game/PipeGrammarLegend";
 import { PipeWorld } from "./game/PipeWorld";
 import { PipeInspector } from "./views/PipeCanvas";
@@ -22,15 +25,17 @@ function App() {
   const [selectedId, setSelectedId] = useState("ln1");
   const [activeAgentStep, setActiveAgentStep] = useState(3);
   const [aiActivity, setAiActivity] = useState<AiActivity | null>(null);
+  const [execution, setExecution] = useState<ExecutionState>({ status: "idle", runId: "initial" });
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const saved = Number(localStorage.getItem("pipelens.inspector-width"));
     return Number.isFinite(saved) && saved >= 320 ? Math.min(saved, 760) : 430;
   });
   const { workspace, workspaceError, importFiles, updateFile } = usePersonalWorkspace();
 
-  const focus = useMemo(() => findPipeNode(nanoGptCase, focusId) ?? nanoGptCase, [focusId]);
-  const selected = useMemo(() => findPipeNode(nanoGptCase, selectedId) ?? focus, [selectedId, focus]);
-  const focusPath = useMemo(() => findPipePath(nanoGptCase, focus.id) ?? [nanoGptCase], [focus.id]);
+  const runtimeCase = useMemo(() => caseFromExecution(nanoGptCase, execution), [execution]);
+  const focus = useMemo(() => findPipeNode(runtimeCase, focusId) ?? runtimeCase, [focusId, runtimeCase]);
+  const selected = useMemo(() => findPipeNode(runtimeCase, selectedId) ?? focus, [selectedId, focus, runtimeCase]);
+  const focusPath = useMemo(() => findPipePath(runtimeCase, focus.id) ?? [runtimeCase], [focus.id, runtimeCase]);
 
   const selectNode = useCallback((node: PipeNode) => {
     setSelectedId(node.id);
@@ -52,10 +57,38 @@ function App() {
     const step = nanoGptAgentReplay[index];
     if (!step.nodeId) return;
     setSelectedId(step.nodeId);
-    const path = findPipePath(nanoGptCase, step.nodeId);
+    const path = findPipePath(runtimeCase, step.nodeId);
     const parent = path?.at(-2);
     if (parent) setFocusId(parent.id);
-  }, []);
+  }, [runtimeCase]);
+
+  const runWorkspace = useCallback(async () => {
+    if (!workspace) {
+      setExecution({ status: "error", runId: `missing-${Date.now()}`, summary: "Upload a Python workspace before running.", file: "model.py", nodeId: "scale", line: 67, durationMs: 0, trace: [] });
+      return;
+    }
+    const pendingId = `pending-${Date.now()}`;
+    setExecution({ status: "running", runId: pendingId, summary: "Executing model.py:L67 with Python…" });
+    try {
+      setExecution(await runPythonWorkspace(workspace));
+    } catch (error) {
+      setExecution({
+        status: "error",
+        runId: `error-${Date.now()}`,
+        summary: error instanceof Error ? error.message : "Python verification failed.",
+        file: "model.py",
+        nodeId: "scale",
+        line: 67,
+        durationMs: 0,
+        trace: [],
+      });
+    }
+  }, [workspace]);
+
+  const updateWorkspaceFile = useCallback(async (path: string, content: string) => {
+    await updateFile(path, content);
+    setExecution({ status: "stale", runId: `stale-${Date.now()}`, summary: "Code changed. Restart to execute Python and refresh the pipeline." });
+  }, [updateFile]);
 
   const currentAgent = nanoGptAgentReplay[activeAgentStep];
 
@@ -96,6 +129,8 @@ function App() {
           agentSteps={nanoGptAgentReplay}
           activeAgentStep={activeAgentStep}
           aiActivity={aiActivity}
+          execution={execution}
+          onRestart={runWorkspace}
           onSelect={selectNode}
           onOpen={openNode}
         />
@@ -124,14 +159,14 @@ function App() {
 
       <PipeInspector
         node={selected}
-        root={nanoGptCase}
+        root={runtimeCase}
         width={inspectorWidth}
         onResize={setInspectorWidth}
         onOpen={openNode}
         workspace={workspace}
         workspaceError={workspaceError}
         onImport={importFiles}
-        onUpdateFile={updateFile}
+        onUpdateFile={updateWorkspaceFile}
         onAiActivity={setAiActivity}
       />
     </main>

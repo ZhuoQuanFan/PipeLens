@@ -36,12 +36,21 @@ test("loads one PixiJS canvas and hard-stops at the injected fault", async ({ pa
 
 test("restart replays and component traversal returns through the breadcrumb", async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
+  await page.route("**/api/run-python", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      runId: "py-failed", status: "failed", summary: "Python execution reproduced the attention scaling fault.",
+      file: "model.py", nodeId: "scale", line: 67, durationMs: 1.2, expected: 4, actual: 16,
+      trace: [{ file: "model.py", line: 67, event: "assertion", status: "fault" }],
+    }) });
+  });
   await page.goto("/");
   const executionStatus = page.locator(".game-world-hud.top-left strong");
   await expect(executionStatus).toHaveText("FLOW BLOCKED · CausalSelfAttention", { timeout: 10_000 });
 
   await page.getByRole("button", { name: "Restart" }).click();
-  await expect(executionStatus).toHaveText("EXECUTION RUNNING");
+  await expect(page.getByRole("button", { name: "Running Python…" })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("PYTHON FAILED");
   await expect(executionStatus).toHaveText("FLOW BLOCKED · CausalSelfAttention", { timeout: 10_000 });
 
   const canvas = await expectCanvasReady(page);
@@ -90,6 +99,13 @@ test("resizes the inspector and stages an AI edit before applying it", async ({ 
       }),
     });
   });
+  await page.route("**/api/run-python", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      runId: "py-passed", status: "passed", summary: "Python execution passed; the attention scale is correct.",
+      file: "model.py", nodeId: "scale", line: 67, durationMs: 0.8, expected: 4, actual: 4,
+      trace: [{ file: "model.py", line: 67, event: "line", status: "healthy" }],
+    }) });
+  });
 
   await page.goto("/");
   await expectCanvasReady(page);
@@ -107,8 +123,11 @@ test("resizes the inspector and stages an AI edit before applying it", async ({ 
   await expect(page.getByRole("status")).toContainText("inspecting");
   await expect(page.getByText("Tighten the LayerNorm epsilon.")).toBeVisible();
   await expect(page.getByRole("status")).toContainText("editing");
-  await page.getByRole("button", { name: "Apply to workspace" }).click();
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await page.getByRole("button", { name: "Apply · Restart to verify" }).click();
+  await expect(page.locator(".ai-worker-status")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Source code" })).toContainText("1e-6");
+  await expect(page.getByText("CODE CHANGED · RESTART TO VERIFY")).toBeVisible();
+  await page.getByRole("button", { name: "Restart" }).click();
+  await expect(page.getByText(/PYTHON PASS · L67/)).toBeVisible();
   expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
 });

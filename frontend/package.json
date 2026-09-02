@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "vitest run src api",
+    "test": "vitest run src api --exclude '.vercel/**' && python3 -m unittest python_tests/test_run_python.py",
     "test:e2e": "playwright test",
     "build": "tsc -b && vite build",
     "preview": "vite preview"

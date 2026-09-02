@@ -139,7 +139,7 @@ export function SourceCodePanel({ node, workspace, workspaceError, onImport, onU
           {candidate ? (
             <>
               <button type="button" className="secondary" onClick={discardCandidate}>Discard</button>
-              <button type="button" onClick={applyCandidate}>Apply to workspace</button>
+              <button type="button" onClick={applyCandidate}>Apply · Restart to verify</button>
             </>
           ) : (
             <button type="button" disabled={!file || !instruction.trim() || requesting} onClick={askForEdit}>

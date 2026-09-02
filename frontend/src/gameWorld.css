@@ -192,6 +192,35 @@
   background: rgba(46,156,244,.1);
   color: #1767aa;
 }
+.game-world-hud.controls button:disabled { cursor: wait; opacity: .58; }
+
+.python-run-badge {
+  position: absolute;
+  z-index: 11;
+  top: 73px;
+  left: 15px;
+  max-width: min(390px, calc(100% - 30px));
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 1px 8px;
+  align-items: center;
+  padding: 8px 11px 8px 8px;
+  border: 1px solid rgba(114,137,154,.48);
+  border-radius: 10px;
+  background: rgba(247,251,253,.93);
+  box-shadow: 0 8px 24px rgba(28,46,59,.11);
+  backdrop-filter: blur(12px);
+}
+.python-run-badge > span { grid-row: 1 / 3; width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; background: #dce7ee; color: #40586a; font-size: 8px; font-weight: 900; }
+.python-run-badge strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; letter-spacing: .045em; }
+.python-run-badge small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--game-muted); font-size: 7px; }
+.python-run-badge.running > span { background: #e6ddff; color: #7043dd; animation: pyPulse .8s ease-in-out infinite alternate; }
+.python-run-badge.passed { border-color: rgba(34,154,104,.46); }
+.python-run-badge.passed > span { background: #d9f4e8; color: #148052; }
+.python-run-badge.failed,.python-run-badge.error { border-color: rgba(239,80,80,.5); }
+.python-run-badge.failed > span,.python-run-badge.error > span { background: #ffe0e0; color: #b62f36; }
+.python-run-badge.stale > span { background: #fff0cb; color: #946100; }
+@keyframes pyPulse { to { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(112,67,221,.22); } }
 
 .game-world-hud.controls label {
   display: flex;

@@ -117,7 +117,7 @@ const faultBlock: PipeNode = {
               level: "statement",
               status: "fault",
               piece: "blocked",
-              anchor: { file: "model.py", line: "67", source: "* (1.0 / math.sqrt(k.size(-1)))" },
+              anchor: { file: "model.py", line: "67", source: "* math.sqrt(k.size(-1))" },
             },
             { id: "causal-mask", label: "Causal mask", level: "statement", status: "neutral", piece: "valve", anchor: { file: "model.py", line: "68", source: "att.masked_fill(..., -inf)" } },
             { id: "softmax", label: "Softmax", level: "statement", status: "neutral", piece: "machine", anchor: { file: "model.py", line: "69", source: "F.softmax(att, dim=-1)" } },
