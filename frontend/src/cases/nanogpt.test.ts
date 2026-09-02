@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findPipeNode, nanoGptCase } from "./nanogpt";
+import { findPipeNode, nanoGptCase, type PipeNode } from "./nanogpt";
 
 describe("nanoGPT hard-stop replay", () => {
   it("marks only the reached fault boundary as fault and leaves downstream nodes neutral", () => {
@@ -31,5 +31,15 @@ describe("nanoGPT hard-stop replay", () => {
     ["wte", "block-0", "block-5", "ln1", "qkv", "q-heads", "k-heads", "v-heads", "qk-matmul"].forEach((nodeId) => {
       expect(findPipeNode(nanoGptCase, nodeId)?.status, nodeId).toBe("healthy");
     });
+  });
+
+  it("gives every selectable node a source line anchor", () => {
+    const visit = (node: PipeNode) => {
+      expect(node.anchor?.file, node.id).toBe("model.py");
+      expect(node.anchor?.line, node.id).toMatch(/^\d+(?:-\d+)?$/);
+      node.children?.forEach(visit);
+    };
+
+    visit(nanoGptCase);
   });
 });

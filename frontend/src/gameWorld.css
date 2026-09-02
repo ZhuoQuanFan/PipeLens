@@ -11,9 +11,13 @@
 .game-app {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 310px;
+  grid-template-columns: minmax(0, 1fr) 430px;
   background: #dfe7ed;
   color: var(--game-ink);
+}
+
+@media (max-width: 1180px) and (min-width: 981px) {
+  .game-app { grid-template-columns: minmax(0, 1fr) 370px; }
 }
 
 .game-stage {

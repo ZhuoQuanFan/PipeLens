@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { PipeNode, ScriptedAgentStep } from "../cases/nanogpt";
+import { SourceCodePanel } from "../game/SourceCodePanel";
 
 type Props = {
   root: PipeNode;
@@ -361,11 +362,11 @@ export function PipeInspector({ node, root, onOpen }: { node: PipeNode; root: Pi
         <div><dt>source</dt><dd>{node.anchor?.file ?? "—"}</dd></div>
         <div><dt>symbol</dt><dd>{node.anchor?.symbol ?? "—"}</dd></div>
       </dl>
-      {node.anchor?.source ? <pre className="source-anchor"><code>{node.anchor.source}</code></pre> : null}
       {node.children?.length ? <button className="open-part" type="button" onClick={() => onOpen(node)}>Open component internals <span>→</span></button> : null}
+      <SourceCodePanel node={node} />
       <div className="inspector-note">
-        <strong>Visual scope</strong>
-        <p>Selecting this component later becomes the Search / Context / Edit boundary for the coding agent. The current agent layer is a scripted observable replay.</p>
+        <strong>Code-linked scope</strong>
+        <p>Every selected pipe part maps to the highlighted source range above. This range is also the Search / Context / Edit boundary for the coding agent.</p>
       </div>
       <div className="root-summary"><span>case root</span><strong>{root.label}</strong><small>nanoGPT · model.py</small></div>
     </aside>

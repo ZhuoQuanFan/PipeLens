@@ -49,10 +49,14 @@ test("restart replays and component traversal returns through the breadcrumb", a
   await canvas.click({ position: { x: dimensions.width / 2, y: dimensions.height / 2 } });
   await expect(page.getByRole("button", { name: "logic CausalSelfAttention" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Q / K / V projection" })).toBeVisible();
+  await expect(page.getByLabel("Source code").locator(".source-location code")).toHaveText("L56");
+  await expect(page.getByLabel("Source code").locator('[data-line="56"]')).toHaveClass(/active/);
   await expectCanvasReady(page);
 
   await page.getByRole("button", { name: "function Block 6" }).click();
   await expect(page.getByRole("button", { name: "logic CausalSelfAttention" })).toHaveCount(0);
+  await expect(page.getByLabel("Source code").locator(".source-location code")).toHaveText("L103–106");
+  await expect(page.getByLabel("Source code").locator('[data-line="104"]')).toHaveClass(/active/);
   await expectCanvasReady(page);
   expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
 });
@@ -64,6 +68,7 @@ test("agent replay and responsive resize keep a single live canvas", async ({ pa
 
   await page.getByRole("button", { name: "inspect CausalSelfAttention" }).click();
   await expect(page.getByRole("heading", { name: "CausalSelfAttention" })).toBeVisible();
+  await expect(page.getByLabel("Source code").locator(".source-location code")).toHaveText("L52–76");
 
   await page.setViewportSize({ width: 800, height: 700 });
   await expectCanvasReady(page);

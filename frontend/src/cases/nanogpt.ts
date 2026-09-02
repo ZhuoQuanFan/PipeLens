@@ -53,7 +53,7 @@ const transformerBlock = (index: number): PipeNode => ({
   level: "function",
   status: index < 6 ? "healthy" : "neutral",
   piece: "machine",
-  anchor: { file: "model.py", symbol: "Block.forward" },
+  anchor: { file: "model.py", symbol: "Block.forward", line: "103-106" },
 });
 
 const faultBlock: PipeNode = {
@@ -63,7 +63,7 @@ const faultBlock: PipeNode = {
   level: "function",
   status: "fault",
   piece: "machine",
-  anchor: { file: "model.py", symbol: "Block.forward", source: "x = x + self.attn(self.ln_1(x))" },
+  anchor: { file: "model.py", symbol: "Block.forward", line: "103-106", source: "x = x + self.attn(self.ln_1(x))" },
   edges: [
     { id: "block-input-ln1", from: "$input", to: "ln1", kind: "sequence" },
     { id: "ln1-attention", from: "ln1", to: "attention", kind: "sequence" },
@@ -76,14 +76,14 @@ const faultBlock: PipeNode = {
     { id: "residual-2-output", from: "residual-2", to: "$output", kind: "sequence" },
   ],
   children: [
-    { id: "ln1", label: "LayerNorm 1", level: "logic", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward" } },
+    { id: "ln1", label: "LayerNorm 1", level: "logic", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward", line: "26-27" } },
     {
       id: "attention",
       label: "CausalSelfAttention",
       level: "logic",
       status: "fault",
       piece: "machine",
-      anchor: { file: "model.py", symbol: "CausalSelfAttention.forward" },
+      anchor: { file: "model.py", symbol: "CausalSelfAttention.forward", line: "52-76" },
       edges: [
         { id: "attention-input-qkv", from: "$input", to: "qkv", kind: "sequence" },
         { id: "qkv-q-heads", from: "qkv", to: "q-heads", kind: "branch" },
@@ -97,19 +97,19 @@ const faultBlock: PipeNode = {
         { id: "attention-output", from: "output-proj", to: "$output", kind: "sequence" },
       ],
       children: [
-        { id: "qkv", label: "Q / K / V projection", level: "function", status: "healthy", piece: "splitter", anchor: { file: "model.py", source: "q, k, v = self.c_attn(x).split(...)" } },
-        { id: "q-heads", label: "Q heads", level: "dataflow", status: "healthy", piece: "straight", anchor: { file: "model.py", source: "q.view(...).transpose(1, 2)" } },
-        { id: "k-heads", label: "K heads", level: "dataflow", status: "healthy", piece: "straight", anchor: { file: "model.py", source: "k.view(...).transpose(1, 2)" } },
-        { id: "v-heads", label: "V heads", level: "dataflow", status: "healthy", piece: "straight", anchor: { file: "model.py", source: "v.view(...).transpose(1, 2)" } },
+        { id: "qkv", label: "Q / K / V projection", level: "function", status: "healthy", piece: "splitter", anchor: { file: "model.py", line: "56", source: "q, k, v = self.c_attn(x).split(...)" } },
+        { id: "q-heads", label: "Q heads", level: "dataflow", status: "healthy", piece: "straight", anchor: { file: "model.py", line: "58", source: "q.view(...).transpose(1, 2)" } },
+        { id: "k-heads", label: "K heads", level: "dataflow", status: "healthy", piece: "straight", anchor: { file: "model.py", line: "57", source: "k.view(...).transpose(1, 2)" } },
+        { id: "v-heads", label: "V heads", level: "dataflow", status: "healthy", piece: "straight", anchor: { file: "model.py", line: "59", source: "v.view(...).transpose(1, 2)" } },
         {
           id: "attention-score",
           label: "Attention scores",
           level: "dataflow",
           status: "fault",
           piece: "junction",
-          anchor: { file: "model.py", source: "att = (q @ k.transpose(-2, -1)) * scale" },
+          anchor: { file: "model.py", line: "67-71", source: "att = (q @ k.transpose(-2, -1)) * scale" },
           children: [
-            { id: "qk-matmul", label: "q @ kᵀ", level: "statement", status: "healthy", piece: "junction", anchor: { file: "model.py", source: "q @ k.transpose(-2, -1)" } },
+            { id: "qk-matmul", label: "q @ kᵀ", level: "statement", status: "healthy", piece: "junction", anchor: { file: "model.py", line: "67", source: "q @ k.transpose(-2, -1)" } },
             {
               id: "scale",
               label: "Scale by √dₖ",
@@ -117,20 +117,20 @@ const faultBlock: PipeNode = {
               level: "statement",
               status: "fault",
               piece: "blocked",
-              anchor: { file: "model.py", source: "* (1.0 / math.sqrt(k.size(-1)))" },
+              anchor: { file: "model.py", line: "67", source: "* (1.0 / math.sqrt(k.size(-1)))" },
             },
-            { id: "causal-mask", label: "Causal mask", level: "statement", status: "neutral", piece: "valve", anchor: { file: "model.py", source: "att.masked_fill(..., -inf)" } },
-            { id: "softmax", label: "Softmax", level: "statement", status: "neutral", piece: "machine", anchor: { file: "model.py", source: "F.softmax(att, dim=-1)" } },
+            { id: "causal-mask", label: "Causal mask", level: "statement", status: "neutral", piece: "valve", anchor: { file: "model.py", line: "68", source: "att.masked_fill(..., -inf)" } },
+            { id: "softmax", label: "Softmax", level: "statement", status: "neutral", piece: "machine", anchor: { file: "model.py", line: "69", source: "F.softmax(att, dim=-1)" } },
           ],
         },
-        { id: "weighted-value", label: "att @ v", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", source: "y = att @ v" } },
-        { id: "output-proj", label: "Output projection", level: "function", status: "neutral", piece: "valve", anchor: { file: "model.py", source: "self.resid_dropout(self.c_proj(y))" } },
+        { id: "weighted-value", label: "att @ v", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", line: "71", source: "y = att @ v" } },
+        { id: "output-proj", label: "Output projection", level: "function", status: "neutral", piece: "valve", anchor: { file: "model.py", line: "74-75", source: "self.resid_dropout(self.c_proj(y))" } },
       ],
     },
-    { id: "residual-1", label: "Residual merge", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", source: "x = x + self.attn(self.ln_1(x))" } },
-    { id: "ln2", label: "LayerNorm 2", level: "logic", status: "neutral", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward" } },
-    { id: "mlp", label: "MLP", level: "logic", status: "neutral", piece: "machine", anchor: { file: "model.py", symbol: "MLP.forward" } },
-    { id: "residual-2", label: "Residual merge", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", source: "x = x + self.mlp(self.ln_2(x))" } },
+    { id: "residual-1", label: "Residual merge", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", line: "104", source: "x = x + self.attn(self.ln_1(x))" } },
+    { id: "ln2", label: "LayerNorm 2", level: "logic", status: "neutral", piece: "valve", anchor: { file: "model.py", symbol: "LayerNorm.forward", line: "26-27" } },
+    { id: "mlp", label: "MLP", level: "logic", status: "neutral", piece: "machine", anchor: { file: "model.py", symbol: "MLP.forward", line: "87-92" } },
+    { id: "residual-2", label: "Residual merge", level: "dataflow", status: "neutral", piece: "junction", anchor: { file: "model.py", line: "105", source: "x = x + self.mlp(self.ln_2(x))" } },
   ],
 };
 
@@ -147,7 +147,7 @@ export const nanoGptCase: PipeNode = {
   level: "behavior",
   status: "fault",
   piece: "machine",
-  anchor: { file: "model.py", symbol: "GPT.forward" },
+  anchor: { file: "model.py", symbol: "GPT.forward", line: "170-193" },
   children: [
     {
       id: "token-position-embedding",
@@ -156,7 +156,7 @@ export const nanoGptCase: PipeNode = {
       level: "logic",
       status: "healthy",
       piece: "junction",
-      anchor: { file: "model.py", symbol: "GPT.forward", source: "tok_emb + pos_emb" },
+      anchor: { file: "model.py", symbol: "GPT.forward", line: "176-179", source: "tok_emb + pos_emb" },
       edges: [
         { id: "embedding-input-token", from: "$input", to: "wte", kind: "branch" },
         { id: "embedding-input-position", from: "$input", to: "wpe", kind: "branch" },
@@ -165,9 +165,9 @@ export const nanoGptCase: PipeNode = {
         { id: "embedding-output", from: "embed-add", to: "$output", kind: "sequence" },
       ],
       children: [
-        { id: "wte", label: "wte(idx)", level: "function", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "transformer.wte" } },
-        { id: "wpe", label: "wpe(pos)", level: "function", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "transformer.wpe" } },
-        { id: "embed-add", label: "tok_emb + pos_emb", level: "dataflow", status: "healthy", piece: "junction", anchor: { file: "model.py", source: "x = self.transformer.drop(tok_emb + pos_emb)" } },
+        { id: "wte", label: "wte(idx)", level: "function", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "transformer.wte", line: "177" } },
+        { id: "wpe", label: "wpe(pos)", level: "function", status: "healthy", piece: "valve", anchor: { file: "model.py", symbol: "transformer.wpe", line: "178" } },
+        { id: "embed-add", label: "tok_emb + pos_emb", level: "dataflow", status: "healthy", piece: "junction", anchor: { file: "model.py", line: "179", source: "x = self.transformer.drop(tok_emb + pos_emb)" } },
       ],
     },
     {
@@ -177,12 +177,12 @@ export const nanoGptCase: PipeNode = {
       level: "logic",
       status: "fault",
       piece: "machine",
-      anchor: { file: "model.py", symbol: "Block" },
+      anchor: { file: "model.py", symbol: "Block", line: "180-181" },
       children: transformerBlocks,
     },
-    { id: "final-ln", label: "Final LayerNorm", level: "logic", status: "neutral", piece: "valve", anchor: { file: "model.py", source: "x = self.transformer.ln_f(x)" } },
-    { id: "lm-head", label: "LM Head", level: "logic", status: "neutral", piece: "machine", anchor: { file: "model.py", source: "logits = self.lm_head(...)" } },
-    { id: "logits", label: "Logits", level: "behavior", status: "neutral", piece: "straight", anchor: { file: "model.py", symbol: "GPT.forward" } },
+    { id: "final-ln", label: "Final LayerNorm", level: "logic", status: "neutral", piece: "valve", anchor: { file: "model.py", line: "182", source: "x = self.transformer.ln_f(x)" } },
+    { id: "lm-head", label: "LM Head", level: "logic", status: "neutral", piece: "machine", anchor: { file: "model.py", line: "184-190", source: "logits = self.lm_head(...)" } },
+    { id: "logits", label: "Logits", level: "behavior", status: "neutral", piece: "straight", anchor: { file: "model.py", symbol: "GPT.forward", line: "184-193" } },
   ],
 };
 
