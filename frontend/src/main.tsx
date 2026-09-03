@@ -8,6 +8,7 @@ import {
   nanoGptCase,
   type PipeNode,
 } from "./cases/nanogpt";
+import { debugCaseById, debugCases } from "./cases/debugCases";
 import { runPythonWorkspace } from "./api/execution";
 import { caseFromExecution } from "./execution/runtimeCase";
 import type { ExecutionState } from "./execution/types";
@@ -21,18 +22,21 @@ import "./gameWorld.css";
 import "./pipeGrammar.css";
 
 function App() {
+  const [activeCaseId, setActiveCaseId] = useState(() => localStorage.getItem("pipelens.debug-case") ?? debugCases[0].id);
   const [focusId, setFocusId] = useState("block-6");
   const [selectedId, setSelectedId] = useState("ln1");
   const [activeAgentStep, setActiveAgentStep] = useState(3);
   const [aiActivity, setAiActivity] = useState<AiActivity | null>(null);
   const [execution, setExecution] = useState<ExecutionState>({ status: "idle", runId: "initial" });
+  const [trialStats, setTrialStats] = useState<TrialStats>(loadTrialStats);
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const saved = Number(localStorage.getItem("pipelens.inspector-width"));
     return Number.isFinite(saved) && saved >= 320 ? Math.min(saved, 760) : 430;
   });
-  const { workspace, workspaceError, importFiles, updateFile } = usePersonalWorkspace();
+  const activeCase = useMemo(() => debugCaseById(activeCaseId), [activeCaseId]);
+  const { workspace, workspaceError, importFiles, updateFile, resetCase } = usePersonalWorkspace(activeCase);
 
-  const runtimeCase = useMemo(() => caseFromExecution(nanoGptCase, execution), [execution]);
+  const runtimeCase = useMemo(() => caseFromExecution(nanoGptCase, execution, activeCase.errors), [activeCase, execution]);
   const focus = useMemo(() => findPipeNode(runtimeCase, focusId) ?? runtimeCase, [focusId, runtimeCase]);
   const selected = useMemo(() => findPipeNode(runtimeCase, selectedId) ?? focus, [selectedId, focus, runtimeCase]);
   const focusPath = useMemo(() => findPipePath(runtimeCase, focus.id) ?? [runtimeCase], [focus.id, runtimeCase]);
@@ -70,7 +74,9 @@ function App() {
     const pendingId = `pending-${Date.now()}`;
     setExecution({ status: "running", runId: pendingId, summary: "Executing model.py:L67 with Python…" });
     try {
-      setExecution(await runPythonWorkspace(workspace));
+      const result = await runPythonWorkspace(workspace);
+      setExecution(result);
+      setTrialStats((current) => incrementStats(current, activeCase.id, result.status === "passed"));
     } catch (error) {
       setExecution({
         status: "error",
@@ -82,8 +88,26 @@ function App() {
         durationMs: 0,
         trace: [],
       });
+      setTrialStats((current) => incrementStats(current, activeCase.id, false));
     }
-  }, [workspace]);
+  }, [activeCase.id, workspace]);
+
+  const selectCase = useCallback((caseId: string) => {
+    localStorage.setItem("pipelens.debug-case", caseId);
+    setActiveCaseId(caseId);
+    setExecution({ status: "idle", runId: `case-${caseId}-${Date.now()}` });
+    setFocusId("attention-score");
+    setSelectedId("scale");
+    setActiveAgentStep(6);
+  }, []);
+
+  const resetActiveCase = useCallback(async () => {
+    await resetCase();
+    setExecution({ status: "idle", runId: `reset-${Date.now()}`, summary: "Faulty baseline restored for a new trial." });
+    setFocusId("attention-score");
+    setSelectedId("scale");
+    setActiveAgentStep(6);
+  }, [resetCase]);
 
   const updateWorkspaceFile = useCallback(async (path: string, content: string) => {
     await updateFile(path, content);
@@ -95,6 +119,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("pipelens.inspector-width", String(inspectorWidth));
   }, [inspectorWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("pipelens.trial-stats", JSON.stringify(trialStats));
+  }, [trialStats]);
 
   return (
     <main className="game-app" style={{ "--inspector-width": `${inspectorWidth}px` } as CSSProperties}>
@@ -122,6 +150,24 @@ function App() {
         </nav>
 
         <PipeGrammarLegend />
+
+        <section className="debug-case-picker" aria-label="Debug cases">
+          <div className="debug-case-intro">
+            <span>REAL PYTHON FAULT CASES</span>
+            <strong>Choose a reproducible bug</strong>
+            <small>Refresh or reset restores faulty code; trial statistics are retained.</small>
+          </div>
+          <div className="debug-case-options">
+            {debugCases.map((item, index) => {
+              const stats = trialStats[item.id] ?? EMPTY_STATS;
+              return <button type="button" className={item.id === activeCase.id ? "active" : ""} key={item.id} onClick={() => selectCase(item.id)}>
+                <span>CASE 0{index + 1}</span><strong>{item.shortTitle}</strong><small>{item.symptom}</small>
+                <i>{stats.passes} fixed · {stats.failures} failed · {stats.runs} runs</i>
+              </button>;
+            })}
+          </div>
+          <button type="button" className="reset-case" onClick={() => void resetActiveCase()}>Reset case</button>
+        </section>
 
         <PipeWorld
           focus={focus}
@@ -174,3 +220,19 @@ function App() {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+type TrialStats = Record<string, { runs: number; passes: number; failures: number }>;
+const EMPTY_STATS = { runs: 0, passes: 0, failures: 0 };
+
+function loadTrialStats(): TrialStats {
+  try {
+    return JSON.parse(localStorage.getItem("pipelens.trial-stats") ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function incrementStats(stats: TrialStats, caseId: string, passed: boolean): TrialStats {
+  const current = stats[caseId] ?? EMPTY_STATS;
+  return { ...stats, [caseId]: { runs: current.runs + 1, passes: current.passes + (passed ? 1 : 0), failures: current.failures + (passed ? 0 : 1) } };
+}

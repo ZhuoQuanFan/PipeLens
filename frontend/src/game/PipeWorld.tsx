@@ -334,7 +334,7 @@ function createAgentProbe() {
 function updateAgentProbe(probe: Container, layout: PipeWorldLayout, nodeId: string | undefined, time: number) {
   const target = nodeId ? layout.nodes.find((item) => item.node.id === nodeId) : undefined;
   probe.visible = Boolean(target);
-  if (target) probe.position.set(target.x + target.width / 2, target.y - 25 + Math.sin(time * 4) * 4);
+  if (target) probe.position.set(target.x + target.width / 2, target.y - (target.node.runtimeError ? 66 : 25) + Math.sin(time * 4) * 4);
 }
 
 type AiWorker = Container & { actionIcon: Graphics };
@@ -364,7 +364,7 @@ function updateAiWorker(worker: AiWorker, layout: PipeWorldLayout, activity: AiA
   worker.visible = Boolean(target && activity);
   if (!target || !activity) return;
   drawAiAction(worker.actionIcon, activity.phase);
-  worker.position.set(target.x + target.width / 2, target.y - 36 + Math.sin(time * 4.6) * 4);
+  worker.position.set(target.x + target.width / 2, target.y - (target.node.runtimeError ? 78 : 36) + Math.sin(time * 4.6) * 4);
   worker.rotation = Math.sin(time * 3) * 0.025;
 }
 

@@ -108,6 +108,12 @@ sections.forEach((item) => item.lines.forEach((line) => { demoFileLines[line.num
 
 export const nanoGptDemoSource = demoFileLines.join("\n");
 
+export function nanoGptSourceWithAttentionStatement(statement: string) {
+  const lines = [...demoFileLines];
+  lines[66] = `            ${statement}`;
+  return lines.join("\n");
+}
+
 export function parseAnchorLines(anchor?: CodeAnchor) {
   const [startText, endText] = (anchor?.line ?? "170").split("-");
   const start = Number(startText);

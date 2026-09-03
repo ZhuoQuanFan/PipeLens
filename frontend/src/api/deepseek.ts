@@ -5,6 +5,7 @@ type AiEditRequest = {
   source: string;
   instruction: string;
   selection: { label: string; line?: string };
+  diagnostic?: string;
 };
 
 export async function requestDeepSeekEdit(request: AiEditRequest): Promise<AiEditCandidate> {
@@ -26,6 +27,7 @@ export async function requestDeepSeekEdit(request: AiEditRequest): Promise<AiEdi
       selection: { ...request.selection, start, end },
       selectedSource,
       sourceContext,
+      diagnostic: request.diagnostic,
     }),
   });
   const responseText = await response.text();
@@ -40,7 +42,9 @@ export async function requestDeepSeekEdit(request: AiEditRequest): Promise<AiEdi
   }
   const updatedLines = [...allLines];
   updatedLines.splice(start - 1, end - start + 1, ...payload.replacementSource.split("\n"));
-  return { updatedSource: updatedLines.join("\n"), summary: payload.summary };
+  const updatedSource = updatedLines.join("\n");
+  if (updatedSource === request.source) throw new Error("AI did not change the faulty statement. Add a more specific instruction and try again.");
+  return { updatedSource, summary: payload.summary };
 }
 
 function parseLineRange(line = "1") {

@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { loadActiveWorkspace, updateWorkspaceFile, workspaceFromUpload } from "./workspaceStore";
+import type { DebugCase } from "../cases/debugCases";
+import { loadCaseWorkspace, updateWorkspaceFile, workspaceFromUpload } from "./workspaceStore";
 import type { PersonalWorkspace } from "./types";
 
-export function usePersonalWorkspace() {
+export function usePersonalWorkspace(debugCase: DebugCase) {
   const [workspace, setWorkspace] = useState<PersonalWorkspace | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    loadActiveWorkspace()
+    setWorkspace(null);
+    setWorkspaceError(null);
+    loadCaseWorkspace(debugCase)
       .then((loaded) => { if (!cancelled) setWorkspace(loaded); })
       .catch((error: unknown) => { if (!cancelled) setWorkspaceError(error instanceof Error ? error.message : "Workspace unavailable"); });
     return () => { cancelled = true; };
-  }, []);
+  }, [debugCase]);
+
+  const resetCase = useCallback(async () => {
+    const reset = await loadCaseWorkspace(debugCase);
+    setWorkspace(reset);
+    setWorkspaceError(null);
+  }, [debugCase]);
 
   const importFiles = useCallback(async (files: FileList) => {
     try {
@@ -31,5 +40,5 @@ export function usePersonalWorkspace() {
     setWorkspace(updated);
   }, [workspace]);
 
-  return { workspace, workspaceError, importFiles, updateFile };
+  return { workspace, workspaceError, importFiles, updateFile, resetCase };
 }

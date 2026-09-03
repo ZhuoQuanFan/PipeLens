@@ -53,6 +53,7 @@ export function SourceCodePanel({ node, workspace, workspaceError, onImport, onU
         source: file.content,
         instruction: instruction.trim(),
         selection: { label: node.label, line: node.anchor?.line },
+        diagnostic: node.runtimeError,
       });
       if (requestToken !== requestTokenRef.current) return;
       setCandidate(result);

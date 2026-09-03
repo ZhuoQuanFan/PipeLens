@@ -172,6 +172,9 @@ button { font: inherit; }
 .inspector-state { display: inline-flex; align-items: center; gap: 6px; width: max-content; border-radius: 999px; padding: 5px 8px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; background: #f1f4f6; color: #697682; }
 .inspector-state i { width: 8px; height: 8px; border-radius: 50%; background: #8f9aa4; }
 .inspector-state.healthy i { background: var(--pipe-blue); }.inspector-state.fault i { background: var(--pipe-red); }
+.inspector-runtime-error { display: flex; gap: 8px; align-items: center; margin: 8px 0 2px; padding: 8px 10px; border: 1px solid rgba(224,75,72,.3); border-radius: 8px; background: rgba(224,75,72,.07); color: #9c3035; font-size: 9px; }
+.inspector-runtime-error strong { flex: 0 0 auto; text-transform: uppercase; letter-spacing: .06em; font-size: 7px; }
+.inspector-runtime-error span { line-height: 1.35; }
 .pipe-inspector dl { margin: 14px 0 10px; }
 .pipe-inspector dl div { display: grid; grid-template-columns: 86px 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px solid #edf0f2; }
 .pipe-inspector dt { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--pipe-muted); }

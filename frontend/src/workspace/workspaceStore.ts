@@ -1,4 +1,4 @@
-import { nanoGptDemoSource } from "../cases/nanogptSource";
+import { sourceForDebugCase, type DebugCase } from "../cases/debugCases";
 import type { PersonalWorkspace, WorkspaceFile } from "./types";
 
 const DATABASE = "pipelens-personal-workspaces";
@@ -29,24 +29,21 @@ async function transact<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore
   });
 }
 
-function demoWorkspace(): PersonalWorkspace {
+export function demoWorkspace(debugCase: DebugCase): PersonalWorkspace {
   const now = Date.now();
   return {
     id: crypto.randomUUID(),
-    name: "nanoGPT demo workspace",
+    name: `${debugCase.title} workspace`,
     createdAt: now,
     updatedAt: now,
-    files: [{ path: "model.py", content: nanoGptDemoSource, language: "python", updatedAt: now }],
+    kind: "demo",
+    caseId: debugCase.id,
+    files: [{ path: "model.py", content: sourceForDebugCase(debugCase), language: "python", updatedAt: now }],
   };
 }
 
-export async function loadActiveWorkspace() {
-  const activeId = localStorage.getItem(ACTIVE_KEY);
-  if (activeId) {
-    const saved = await transact<PersonalWorkspace | undefined>("readonly", (store) => store.get(activeId));
-    if (saved) return saved;
-  }
-  const workspace = demoWorkspace();
+export async function loadCaseWorkspace(debugCase: DebugCase) {
+  const workspace = demoWorkspace(debugCase);
   await saveWorkspace(workspace);
   return workspace;
 }
@@ -77,7 +74,7 @@ export async function workspaceFromUpload(fileList: FileList) {
   })));
   const firstPath = files[0].path;
   const rootName = firstPath.includes("/") ? firstPath.split("/")[0] : firstPath.replace(/\.[^.]+$/, "");
-  return saveWorkspace({ id: crypto.randomUUID(), name: rootName || "Uploaded workspace", createdAt: now, updatedAt: now, files });
+  return saveWorkspace({ id: crypto.randomUUID(), name: rootName || "Uploaded workspace", createdAt: now, updatedAt: now, kind: "uploaded", files });
 }
 
 export function findWorkspaceFile(workspace: PersonalWorkspace | null, requestedPath = "model.py") {

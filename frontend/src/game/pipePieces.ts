@@ -63,7 +63,10 @@ export function renderPipePiece(worldNode: WorldNode, onOpen: () => void): Piece
   }
 
   addLabels(container, worldNode, piece);
-  if (worldNode.node.status === "fault") addFaultBadge(container, worldNode);
+  if (worldNode.node.status === "fault") {
+    if (worldNode.node.runtimeError) addRuntimeError(container, worldNode, worldNode.node.runtimeError);
+    addFaultBadge(container, worldNode);
+  }
   return { container, fill };
 }
 
@@ -286,6 +289,24 @@ function addFaultBadge(container: Container, node: WorldNode) {
   mark.anchor.set(0.5);
   mark.position.set(node.width - 8, 8);
   container.addChild(badge, mark);
+}
+
+function addRuntimeError(container: Container, node: WorldNode, message: string) {
+  const width = Math.min(220, Math.max(132, node.width + 18));
+  const height = 34;
+  const x = (node.width - width) / 2;
+  const y = -43;
+  const panel = new Graphics();
+  panel.roundRect(x, y, width, height, 10).fill({ color: 0x8f252b, alpha: 0.96 });
+  panel.roundRect(x, y, width, height, 10).stroke({ color: 0xffffff, width: 2, alpha: 0.94 });
+  panel.moveTo(node.width / 2 - 6, y + height).lineTo(node.width / 2, y + height + 7).lineTo(node.width / 2 + 6, y + height).fill({ color: 0x8f252b });
+  const text = new Text({
+    text: `ERROR · ${message}`,
+    style: { fontFamily: "Inter, Arial", fontSize: 8, fontWeight: "800", fill: 0xffffff, align: "center", wordWrap: true, wordWrapWidth: width - 16, lineHeight: 10 },
+  });
+  text.anchor.set(0.5);
+  text.position.set(node.width / 2, y + height / 2);
+  container.addChild(panel, text);
 }
 
 function borderColor(node: WorldNode) {

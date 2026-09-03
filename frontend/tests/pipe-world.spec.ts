@@ -86,7 +86,7 @@ test("agent replay and responsive resize keep a single live canvas", async ({ pa
   expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
 });
 
-test("resizes the inspector and stages an AI edit before applying it", async ({ page }) => {
+test("fixes a real case, verifies it, then restores the faulty baseline", async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await page.route("**/api/ai-edit", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -94,8 +94,8 @@ test("resizes the inspector and stages an AI edit before applying it", async ({ 
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        replacementSource: "    def forward(self, input):\n        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-6)",
-        summary: "Tighten the LayerNorm epsilon.",
+        replacementSource: "            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))",
+        summary: "Restore inverse square-root head scaling.",
       }),
     });
   });
@@ -110,6 +110,7 @@ test("resizes the inspector and stages an AI edit before applying it", async ({ 
   await page.goto("/");
   await expectCanvasReady(page);
   await expect(page.getByText("PERSONAL WORKSPACE")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Debug cases" }).getByRole("button")).toHaveCount(4);
   await expect(page.getByRole("link", { name: /GitHub/i })).toHaveCount(0);
 
   const inspector = page.locator(".pipe-inspector");
@@ -118,16 +119,21 @@ test("resizes the inspector and stages an AI edit before applying it", async ({ 
   const after = await inspector.evaluate((element) => element.getBoundingClientRect().width);
   expect(after).toBeGreaterThan(before);
 
-  await page.getByLabel("AI edit instruction").fill("Use a smaller normalization epsilon");
+  await page.getByRole("button", { name: "inspect Scale by √dₖ" }).click();
+  await expect(page.getByText("Expected 4 · observed 16").first()).toBeVisible();
+  await page.getByLabel("AI edit instruction").fill("Fix the observed attention scaling failure");
   await page.getByRole("button", { name: "Ask AI to modify" }).click();
   await expect(page.getByRole("status")).toContainText("inspecting");
-  await expect(page.getByText("Tighten the LayerNorm epsilon.")).toBeVisible();
+  await expect(page.getByText("Restore inverse square-root head scaling.")).toBeVisible();
   await expect(page.getByRole("status")).toContainText("editing");
   await page.getByRole("button", { name: "Apply · Restart to verify" }).click();
   await expect(page.locator(".ai-worker-status")).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Source code" })).toContainText("1e-6");
+  await expect(page.getByRole("region", { name: "Source code" })).toContainText("1.0 / math.sqrt(k.size(-1))");
   await expect(page.getByText("CODE CHANGED · RESTART TO VERIFY")).toBeVisible();
   await page.getByRole("button", { name: "Restart" }).click();
   await expect(page.getByText(/PYTHON PASS · L67/)).toBeVisible();
+  await page.getByRole("button", { name: "Reset case" }).click();
+  await expect(page.getByRole("region", { name: "Source code" })).toContainText("* math.sqrt(k.size(-1))");
+  await expect(page.getByText("Expected 4 · observed 16").first()).toBeVisible();
   expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
 });

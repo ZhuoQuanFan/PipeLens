@@ -89,7 +89,7 @@ export default async function handler(request, response) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return json(response, 503, { error: "DeepSeek is not configured on this deployment." });
 
-  const { filePath, sourceContext, selectedSource, instruction, selection } = request.body ?? {};
+  const { filePath, sourceContext, selectedSource, instruction, selection, diagnostic } = request.body ?? {};
   if (typeof filePath !== "string" || typeof sourceContext !== "string" || typeof selectedSource !== "string" || typeof instruction !== "string") {
     return json(response, 400, { error: "filePath, source context, selected source and instruction are required." });
   }
@@ -101,6 +101,7 @@ export default async function handler(request, response) {
   const prompt = [
     selectedRange,
     `Requested change: ${instruction.trim()}`,
+    typeof diagnostic === "string" && diagnostic.trim() ? `Observed Python failure: ${diagnostic.trim()}` : "",
     "Return only the replacement text for the selected lines. Preserve indentation and do not repeat line numbers.",
     `SELECTED SOURCE:\n${selectedSource}`,
     `NEARBY CONTEXT (read-only, with line numbers):\n${sourceContext}`,

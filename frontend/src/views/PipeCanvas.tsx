@@ -414,6 +414,7 @@ export function PipeInspector({
       <div className="inspector-eyebrow">SELECTED PART</div>
       <h2>{node.label}</h2>
       <div className={`inspector-state ${node.status}`}><i />{node.status === "fault" ? "fault boundary" : node.status === "healthy" ? "normal path" : "structural"}</div>
+      {node.runtimeError ? <div className="inspector-runtime-error"><strong>Runtime error</strong><span>{node.runtimeError}</span></div> : null}
       <dl>
         <div><dt>semantic level</dt><dd>{node.level}</dd></div>
         <div><dt>source</dt><dd>{node.anchor?.file ?? "—"}</dd></div>

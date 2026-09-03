@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { findWorkspaceFile } from "./workspaceStore";
+import { debugCases } from "../cases/debugCases";
+import { demoWorkspace, findWorkspaceFile } from "./workspaceStore";
 import type { PersonalWorkspace } from "./types";
 
 const workspace: PersonalWorkspace = {
@@ -21,5 +22,12 @@ describe("personal workspace file resolution", () => {
 
   it("returns no file when an uploaded workspace has no matching source", () => {
     expect(findWorkspaceFile(workspace, "missing.py")).toBeUndefined();
+  });
+
+  it("creates a fresh faulty baseline for every trial", () => {
+    const first = demoWorkspace(debugCases[1]);
+    const second = demoWorkspace(debugCases[1]);
+    expect(first.id).not.toBe(second.id);
+    expect(findWorkspaceFile(first, "model.py")?.content.split("\n")[66].trim()).toBe(debugCases[1].faultyStatement);
   });
 });

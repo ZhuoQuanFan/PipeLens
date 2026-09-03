@@ -28,6 +28,11 @@ class RunPythonTests(unittest.TestCase):
         self.assertEqual(result["actual"], 16.0)
         self.assertEqual(result["trace"][-1]["status"], "fault")
 
+    def test_reproduces_wrong_dimension_as_fault(self):
+        result = MODULE.verify_payload(payload("att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-2)))"))
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["actual"], 2.0)
+
     def test_rejects_unsafe_python(self):
         with self.assertRaisesRegex(ValueError, "verification helpers|not available"):
             MODULE.verify_payload(payload("att = __import__('os').environ"))

@@ -34,6 +34,7 @@ export type PipeNode = {
   status: PipeStatus;
   piece?: PipePiece;
   anchor?: CodeAnchor;
+  runtimeError?: string;
   children?: PipeNode[];
   edges?: PipeEdge[];
 };

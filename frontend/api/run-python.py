@@ -20,30 +20,33 @@ ALLOWED_ORIGINS = {
 
 
 class TraceTensor:
-    def __init__(self, value: float, last_size: int = 4):
+    def __init__(self, value: float, last_size: int = 4, sequence_size: int = 16):
         self.value = float(value)
         self.last_size = last_size
+        self.sequence_size = sequence_size
 
     def transpose(self, _left: int, _right: int) -> "TraceTensor":
         return self
 
     def size(self, dimension: int) -> int:
-        if dimension != -1:
-            raise ValueError("The verification harness only exposes the final tensor dimension.")
-        return self.last_size
+        if dimension == -1:
+            return self.last_size
+        if dimension == -2:
+            return self.sequence_size
+        raise ValueError("The verification harness only exposes head width and sequence length.")
 
     def __matmul__(self, other: "TraceTensor") -> "TraceTensor":
-        return TraceTensor(self.value * other.value, other.last_size)
+        return TraceTensor(self.value * other.value, other.last_size, other.sequence_size)
 
     def __mul__(self, other: Any) -> "TraceTensor":
         value = other.value if isinstance(other, TraceTensor) else other
-        return TraceTensor(self.value * float(value), self.last_size)
+        return TraceTensor(self.value * float(value), self.last_size, self.sequence_size)
 
     __rmul__ = __mul__
 
     def __truediv__(self, other: Any) -> "TraceTensor":
         value = other.value if isinstance(other, TraceTensor) else other
-        return TraceTensor(self.value / float(value), self.last_size)
+        return TraceTensor(self.value / float(value), self.last_size, self.sequence_size)
 
 
 class SafeStatement(ast.NodeVisitor):

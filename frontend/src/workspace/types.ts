@@ -11,6 +11,8 @@ export type PersonalWorkspace = {
   createdAt: number;
   updatedAt: number;
   files: WorkspaceFile[];
+  kind?: "demo" | "uploaded";
+  caseId?: string;
 };
 
 export type AiPhase = "idle" | "inspecting" | "editing";
