@@ -6,7 +6,7 @@ const candidates = process.platform === "win32"
   : [...configured, ["python3", []], ["python", []]];
 
 for (const [command, prefix] of candidates) {
-  const result = spawnSync(command, [...prefix, "-m", "unittest", "python_tests/test_run_python.py"], {
+  const result = spawnSync(command, [...prefix, "-m", "unittest", "discover", "-s", "python_tests", "-p", "test_*.py"], {
     cwd: process.cwd(),
     stdio: "inherit",
   });

@@ -1,7 +1,7 @@
 import type { RepositoryGraph } from "../model/repositoryGraph";
 import type { PersonalWorkspace } from "../workspace/types";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? "http://localhost:8000" : "");
 
 export async function analyzeRepository(workspace: PersonalWorkspace): Promise<RepositoryGraph> {
   const response = await fetch(`${API_BASE}/api/analyze-repository`, {

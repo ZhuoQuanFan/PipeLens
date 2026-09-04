@@ -45,6 +45,11 @@ TypeScript use a conservative deterministic extractor for declarations,
 imports, and common call forms. Local import resolution supports Python module
 paths, relative Python imports, JS/TS extensions, and `index.*` modules.
 
+The FastAPI implementation serves local development. The Vercel deployment
+uses a standard-library-only Python function with the same response contract,
+so uploaded workspace contents remain request-scoped and are not persisted by
+the repository analyzer.
+
 ### PipeWorld adapter and navigation
 
 The frontend converts the repository graph to the existing PipeLens

@@ -5,6 +5,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
+    "api/analyze-repository.py": {
+      "maxDuration": 10
+    },
     "api/ai-edit.mjs": {
       "maxDuration": 60
     },
