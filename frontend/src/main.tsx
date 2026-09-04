@@ -10,10 +10,13 @@ import {
 } from "./cases/nanogpt";
 import { debugCaseById, debugCases } from "./cases/debugCases";
 import { runPythonWorkspace } from "./api/execution";
+import { analyzeRepository } from "./api/repositoryGraph";
 import { caseFromExecution } from "./execution/runtimeCase";
 import type { ExecutionState } from "./execution/types";
 import { PipeGrammarLegend } from "./game/PipeGrammarLegend";
 import { PipeWorld } from "./game/PipeWorld";
+import { buildArchitecturePipe, type ArchitectureView, type RepositoryGraph } from "./model/repositoryGraph";
+import { ArchitectureLens } from "./views/ArchitectureLens";
 import { PipeInspector } from "./views/PipeCanvas";
 import { usePersonalWorkspace } from "./workspace/usePersonalWorkspace";
 import type { AiActivity } from "./workspace/types";
@@ -22,12 +25,19 @@ import "./gameWorld.css";
 import "./pipeGrammar.css";
 
 function App() {
+  const [viewMode, setViewMode] = useState<"demo" | "architecture">("demo");
   const [activeCaseId, setActiveCaseId] = useState(() => localStorage.getItem("pipelens.debug-case") ?? debugCases[0].id);
   const [focusId, setFocusId] = useState("block-6");
   const [selectedId, setSelectedId] = useState("ln1");
   const [activeAgentStep, setActiveAgentStep] = useState(3);
   const [aiActivity, setAiActivity] = useState<AiActivity | null>(null);
   const [execution, setExecution] = useState<ExecutionState>({ status: "idle", runId: "initial" });
+  const [repositoryGraph, setRepositoryGraph] = useState<RepositoryGraph | null>(null);
+  const [architectureStatus, setArchitectureStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [architectureError, setArchitectureError] = useState<string | null>(null);
+  const [architectureView, setArchitectureView] = useState<ArchitectureView>({ kind: "overview" });
+  const [architectureFocusId, setArchitectureFocusId] = useState("repository:root");
+  const [architectureSelectedId, setArchitectureSelectedId] = useState<string | null>(null);
   const [trialStats, setTrialStats] = useState<TrialStats>(loadTrialStats);
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const saved = Number(localStorage.getItem("pipelens.inspector-width"));
@@ -37,24 +47,42 @@ function App() {
   const { workspace, workspaceError, importFiles, updateFile, resetCase } = usePersonalWorkspace(activeCase);
 
   const runtimeCase = useMemo(() => caseFromExecution(nanoGptCase, execution, activeCase.errors), [activeCase, execution]);
-  const focus = useMemo(() => findPipeNode(runtimeCase, focusId) ?? runtimeCase, [focusId, runtimeCase]);
-  const selected = useMemo(() => findPipeNode(runtimeCase, selectedId) ?? focus, [selectedId, focus, runtimeCase]);
-  const focusPath = useMemo(() => findPipePath(runtimeCase, focus.id) ?? [runtimeCase], [focus.id, runtimeCase]);
+  const architectureRoot = useMemo(
+    () => repositoryGraph ? buildArchitecturePipe(repositoryGraph, architectureView) : null,
+    [repositoryGraph, architectureView],
+  );
+  const displayedRoot = viewMode === "architecture" && architectureRoot ? architectureRoot : runtimeCase;
+  const displayedFocusId = viewMode === "architecture" ? architectureFocusId : focusId;
+  const displayedSelectedId = viewMode === "architecture" ? architectureSelectedId : selectedId;
+  const focus = useMemo(() => findPipeNode(displayedRoot, displayedFocusId) ?? displayedRoot, [displayedFocusId, displayedRoot]);
+  const selected = useMemo(() => findPipeNode(displayedRoot, displayedSelectedId ?? "") ?? focus, [displayedRoot, displayedSelectedId, focus]);
+  const focusPath = useMemo(() => findPipePath(displayedRoot, focus.id) ?? [displayedRoot], [displayedRoot, focus.id]);
 
   const selectNode = useCallback((node: PipeNode) => {
-    setSelectedId(node.id);
-  }, []);
+    if (viewMode === "architecture") setArchitectureSelectedId(node.id);
+    else setSelectedId(node.id);
+  }, [viewMode]);
 
   const openNode = useCallback((node: PipeNode) => {
     if (!node.children?.length) return;
-    setFocusId(node.id);
-    setSelectedId(node.children[0]?.id ?? node.id);
-  }, []);
+    if (viewMode === "architecture") {
+      setArchitectureFocusId(node.id);
+      setArchitectureSelectedId(node.children[0]?.id ?? node.id);
+    } else {
+      setFocusId(node.id);
+      setSelectedId(node.children[0]?.id ?? node.id);
+    }
+  }, [viewMode]);
 
   const navigate = useCallback((node: PipeNode) => {
-    setFocusId(node.id);
-    setSelectedId(node.id);
-  }, []);
+    if (viewMode === "architecture") {
+      setArchitectureFocusId(node.id);
+      setArchitectureSelectedId(node.id);
+    } else {
+      setFocusId(node.id);
+      setSelectedId(node.id);
+    }
+  }, [viewMode]);
 
   const selectAgentStep = useCallback((index: number) => {
     setActiveAgentStep(index);
@@ -116,6 +144,37 @@ function App() {
 
   const currentAgent = nanoGptAgentReplay[activeAgentStep];
 
+  const selectArchitectureNode = useCallback((nodeId: string) => {
+    if (!repositoryGraph) return;
+    const overview = buildArchitecturePipe(repositoryGraph, { kind: "overview" });
+    const path = findPipePath(overview, nodeId);
+    setArchitectureView({ kind: "overview" });
+    setArchitectureSelectedId(nodeId);
+    setArchitectureFocusId(path?.at(-2)?.id ?? overview.id);
+  }, [repositoryGraph]);
+
+  const changeArchitectureView = useCallback((nextView: ArchitectureView) => {
+    if (!repositoryGraph) return;
+    const nextRoot = buildArchitecturePipe(repositoryGraph, nextView);
+    const selectedForView = nextView.kind === "route"
+      ? findPipeNode(nextRoot, nextView.targetId)?.id ?? nextView.nodeId
+      : nextView.kind === "overview"
+        ? repositoryGraph.root_id
+        : nextView.nodeId;
+    setArchitectureView(nextView);
+    setArchitectureFocusId(nextRoot.id);
+    setArchitectureSelectedId(selectedForView);
+  }, [repositoryGraph]);
+
+  const changeViewMode = useCallback((mode: "demo" | "architecture") => {
+    if (mode === "architecture" && !repositoryGraph) return;
+    setViewMode(mode);
+    if (mode === "architecture" && architectureRoot) {
+      setArchitectureFocusId(architectureRoot.id);
+      setArchitectureSelectedId((current) => current ?? architectureRoot.children?.[0]?.id ?? architectureRoot.id);
+    }
+  }, [architectureRoot, repositoryGraph]);
+
   useEffect(() => {
     localStorage.setItem("pipelens.inspector-width", String(inspectorWidth));
   }, [inspectorWidth]);
@@ -124,16 +183,43 @@ function App() {
     localStorage.setItem("pipelens.trial-stats", JSON.stringify(trialStats));
   }, [trialStats]);
 
+  useEffect(() => {
+    if (!workspace) {
+      setArchitectureStatus("idle");
+      setRepositoryGraph(null);
+      return;
+    }
+    let cancelled = false;
+    setArchitectureStatus("loading");
+    setArchitectureError(null);
+    analyzeRepository(workspace)
+      .then((graph) => {
+        if (cancelled) return;
+        setRepositoryGraph(graph);
+        setArchitectureStatus("ready");
+        setArchitectureView({ kind: "overview" });
+        setArchitectureFocusId(graph.root_id);
+        setArchitectureSelectedId(graph.nodes.find((node) => node.kind === "module")?.id ?? graph.root_id);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setArchitectureStatus("error");
+        setArchitectureError(error instanceof Error ? error.message : "Repository analysis failed.");
+      });
+    return () => { cancelled = true; };
+  }, [workspace]);
+
   return (
     <main className="game-app" style={{ "--inspector-width": `${inspectorWidth}px` } as CSSProperties}>
       <section className="game-stage">
         <header className="game-topbar">
           <div>
-            <div className="case-kicker">FAMOUS CODE CASE · karpathy/nanoGPT</div>
-            <h1>PipeLens PipeWorld</h1>
+            <div className="case-kicker">{viewMode === "architecture" ? "SOURCE-GROUNDED REPOSITORY MAP" : "FAMOUS CODE CASE · karpathy/nanoGPT"}</div>
+            <h1>{viewMode === "architecture" ? "PipeLens Architecture World" : "PipeLens PipeWorld"}</h1>
             <p>
-              Program execution is rendered as a live entity moving through a 2D code world. Code structure is encoded as
-              different game pieces, while a hard fault physically blocks downstream flow.
+              {viewMode === "architecture"
+                ? "Modules, symbols, imports and calls are rendered with the same pipe grammar. Search the graph, drill into containment, or trace authored upstream/downstream routes."
+                : "Program execution is rendered as a live entity moving through a 2D code world. Code structure is encoded as different game pieces, while a hard fault physically blocks downstream flow."}
             </p>
           </div>
           <div className="game-badge">game-like interaction · scientific visualization semantics</div>
@@ -151,7 +237,19 @@ function App() {
 
         <PipeGrammarLegend />
 
-        <section className="debug-case-picker" aria-label="Debug cases">
+        <ArchitectureLens
+          active={viewMode === "architecture"}
+          graph={repositoryGraph}
+          status={architectureStatus}
+          error={architectureError}
+          selectedId={architectureSelectedId}
+          view={architectureView}
+          onMode={changeViewMode}
+          onSelect={selectArchitectureNode}
+          onView={changeArchitectureView}
+        />
+
+        {viewMode === "demo" ? <section className="debug-case-picker" aria-label="Debug cases">
           <div className="debug-case-intro">
             <span>REAL PYTHON FAULT CASES</span>
             <strong>Choose a reproducible bug</strong>
@@ -167,21 +265,22 @@ function App() {
             })}
           </div>
           <button type="button" className="reset-case" onClick={() => void resetActiveCase()}>Reset case</button>
-        </section>
+        </section> : null}
 
         <PipeWorld
           focus={focus}
           selectedId={selected.id}
-          agentSteps={nanoGptAgentReplay}
+          agentSteps={viewMode === "demo" ? nanoGptAgentReplay : []}
           activeAgentStep={activeAgentStep}
-          aiActivity={aiActivity}
-          execution={execution}
-          onRestart={runWorkspace}
+          aiActivity={viewMode === "demo" ? aiActivity : null}
+          execution={viewMode === "demo" ? execution : { status: "idle", runId: architectureRoot?.id ?? "architecture" }}
+          mode={viewMode === "demo" ? "execution" : "architecture"}
+          onRestart={viewMode === "demo" ? runWorkspace : async () => undefined}
           onSelect={selectNode}
           onOpen={openNode}
         />
 
-        <section className="game-agent-strip">
+        {viewMode === "demo" ? <section className="game-agent-strip">
           <div className="game-agent-heading">
             <span>SCRIPTED AGENT REPLAY</span>
             <strong>{currentAgent.action} · {currentAgent.target}</strong>
@@ -200,12 +299,12 @@ function App() {
               </button>
             ))}
           </div>
-        </section>
+        </section> : null}
       </section>
 
       <PipeInspector
         node={selected}
-        root={runtimeCase}
+        root={displayedRoot}
         width={inspectorWidth}
         onResize={setInspectorWidth}
         onOpen={openNode}

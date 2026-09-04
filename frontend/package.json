@@ -3,9 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite",
-    "test": "vitest run src api --exclude '.vercel/**' && python3 -m unittest python_tests/test_run_python.py",
+    "test": "vitest run src api --exclude '.vercel/**' && node scripts/run-python-tests.mjs",
     "test:e2e": "playwright test",
     "build": "tsc -b && vite build",
     "preview": "vite preview"

@@ -1,5 +1,33 @@
 import { expect, test, type Page } from "@playwright/test";
 
+const repositoryGraph = {
+  schema_version: 1,
+  root_id: "repository:root",
+  nodes: [
+    { id: "repository:root", label: "Repository", kind: "repository", tags: [] },
+    { id: "module:model", label: "model.py", kind: "module", language: "python", anchor: { file: "model.py", start_line: 1, end_line: 192 }, tags: [] },
+    { id: "symbol:train", label: "train()", kind: "function", language: "python", anchor: { file: "model.py", start_line: 150, end_line: 160, symbol: "train" }, tags: [] },
+    { id: "symbol:forward", label: "MLP.forward()", kind: "method", language: "python", anchor: { file: "model.py", start_line: 87, end_line: 92, symbol: "MLP.forward" }, tags: [] },
+  ],
+  edges: [
+    { id: "contains:model", source: "repository:root", target: "module:model", relation: "contains", confidence: "extracted" },
+    { id: "contains:train", source: "module:model", target: "symbol:train", relation: "contains", confidence: "extracted" },
+    { id: "contains:forward", source: "module:model", target: "symbol:forward", relation: "contains", confidence: "extracted" },
+    { id: "calls:forward", source: "symbol:train", target: "symbol:forward", relation: "calls", confidence: "inferred", anchor: { file: "model.py", start_line: 155, symbol: "MLP.forward" } },
+  ],
+  summary: { files: 1, symbols: 2, imports: 0, calls: 1, external_dependencies: 0 },
+  warnings: [],
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/analyze-repository", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "Access-Control-Allow-Origin": "*" },
+    body: JSON.stringify(repositoryGraph),
+  }));
+});
+
 function collectRuntimeErrors(page: Page) {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -82,6 +110,27 @@ test("agent replay and responsive resize keep a single live canvas", async ({ pa
   await page.setViewportSize({ width: 800, height: 700 });
   await expectCanvasReady(page);
   await page.setViewportSize({ width: 1920, height: 1080 });
+  await expectCanvasReady(page);
+  expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
+});
+
+test("searches and routes the repository graph while preserving source navigation", async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Repository map" }).click();
+  await expect(page.getByRole("heading", { name: "PipeLens Architecture World" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Archify repository lens" }).getByText("1 modules · 2 symbols · 0 imports · 1 calls")).toBeVisible();
+
+  await page.getByLabel("FIND FILE OR SYMBOL").fill("train");
+  await page.getByRole("button", { name: /train\(\)/ }).click();
+  await expect(page.getByRole("heading", { name: "train()" })).toBeVisible();
+  await expect(page.getByLabel("Source code").locator(".source-location code")).toHaveText("L150–160");
+
+  await page.getByLabel("TRACE DIRECTED ROUTE").fill("forward");
+  await page.getByRole("button", { name: /MLP\.forward\(\)/ }).click();
+  await expect(page.getByRole("button", { name: /behavior Route · train\(\)/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MLP.forward()" })).toBeVisible();
+  await expect(page.getByLabel("Source code").locator(".source-location code")).toHaveText("L87–92");
   await expectCanvasReady(page);
   expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
 });

@@ -9,6 +9,13 @@ Instead of treating AI-generated or AI-modified code as a flat collection of fil
 > **Core idea**  
 > Make both *what the program actually did* and *where the AI looked* visible, then use visual selection as a control primitive for the agent's next search, context acquisition, and edit.
 
+The runnable prototype now also includes an **Archify-derived Repository map**:
+Python and JavaScript/TypeScript workspaces are converted into a source-grounded
+module/symbol/import/call graph, then adapted to the existing PipeWorld visual
+grammar for search, drill-down, upstream/downstream reach, directed routes, and
+code-line navigation. See [`docs/archify-integration.md`](docs/archify-integration.md)
+for sources, attribution, architecture, and limitations.
+
 ---
 
 ## 1. Research Motivation

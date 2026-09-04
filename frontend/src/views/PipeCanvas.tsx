@@ -433,7 +433,7 @@ export function PipeInspector({
         <strong>Code-linked scope</strong>
         <p>Every selected pipe part maps to the highlighted source range above. This range is also the Search / Context / Edit boundary for the coding agent.</p>
       </div>
-      <div className="root-summary"><span>case root</span><strong>{root.label}</strong><small>nanoGPT · model.py</small></div>
+      <div className="root-summary"><span>view root</span><strong>{root.label}</strong><small>{root.subtitle ?? root.anchor?.file ?? "source-grounded repository"}</small></div>
     </aside>
   );
 }

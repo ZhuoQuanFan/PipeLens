@@ -14,6 +14,7 @@ type Props = {
   activeAgentStep: number;
   aiActivity: AiActivity | null;
   execution: ExecutionState;
+  mode?: "execution" | "architecture";
   onRestart: () => Promise<void>;
   onSelect: (node: PipeNode) => void;
   onOpen: (node: PipeNode) => void;
@@ -30,7 +31,7 @@ const PIPE_BORDER = 0x91a2ad;
 const PIPE_INNER = 0xd6e0e6;
 const BASE_FLOW_SPEED = 190;
 
-export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiActivity, execution, onRestart, onSelect, onOpen }: Props) {
+export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiActivity, execution, mode = "execution", onRestart, onSelect, onOpen }: Props) {
   const hostRef = useRef<HTMLDivElement>(null!);
   const selectedRef = useRef(selectedId);
   const agentNodeRef = useRef(agentSteps[activeAgentStep]?.nodeId);
@@ -207,14 +208,14 @@ export function PipeWorld({ focus, selectedId, agentSteps, activeAgentStep, aiAc
         : execution.status === "stale" ? "CODE CHANGED · RESTART TO VERIFY" : null;
 
   return <section className="game-world-shell">
-    <div className="game-world-hud top-left"><span className="hud-kicker">PIPEWORLD · PIXIJS</span><strong>{blockedLabel ? `FLOW BLOCKED · ${blockedLabel}` : playing ? "EXECUTION RUNNING" : "EXECUTION PAUSED"}</strong></div>
+    <div className="game-world-hud top-left"><span className="hud-kicker">{mode === "architecture" ? "ARCHITECTURE FLOW · SOURCE GROUNDED" : "PIPEWORLD · PIXIJS"}</span><strong>{blockedLabel ? `FLOW BLOCKED · ${blockedLabel}` : playing ? mode === "architecture" ? "RELATION FLOWING" : "EXECUTION RUNNING" : mode === "architecture" ? "RELATION PAUSED" : "EXECUTION PAUSED"}</strong></div>
     <div className="game-world-hud controls">
       <button type="button" disabled={execution.status === "running"} onClick={() => blockedLabel ? void restart() : setPlaying((value) => !value)}>{blockedLabel ? "Replay" : playing ? "Pause" : "Play"}</button>
-      <button type="button" disabled={execution.status === "running"} onClick={() => void restart()}>{execution.status === "running" ? "Running Python…" : "Restart"}</button>
+      <button type="button" disabled={execution.status === "running"} onClick={() => void restart()}>{execution.status === "running" ? "Running Python…" : mode === "architecture" ? "Replay" : "Restart"}</button>
       <button type="button" className={follow ? "active" : ""} onClick={() => setFollow((value) => !value)}>Follow</button>
       <label><span>speed</span><select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}><option value={0.6}>0.6×</option><option value={1}>1×</option><option value={1.8}>1.8×</option><option value={3}>3×</option></select></label>
     </div>
-    {executionLabel ? <div className={`python-run-badge ${execution.status}`} role="status"><span>PY</span><strong>{executionLabel}</strong><small>{execution.summary}</small></div> : null}
+    {mode === "execution" && executionLabel ? <div className={`python-run-badge ${execution.status}`} role="status"><span>PY</span><strong>{executionLabel}</strong><small>{execution.summary}</small></div> : null}
     <div className="game-world-hud bottom-left"><span>drag to pan</span><span>wheel to zoom</span><span>click component to enter</span></div>
     {aiActivity ? (
       <div className={`ai-worker-status ${aiActivity.phase}`} role="status">

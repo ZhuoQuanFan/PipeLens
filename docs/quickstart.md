@@ -18,6 +18,16 @@ http://localhost:8000/health
 http://localhost:8000/api/demo-trace
 ```
 
+Repository analysis is available at:
+
+```text
+POST http://localhost:8000/api/analyze-repository
+```
+
+It accepts the in-memory Personal Workspace files and returns a source-grounded
+module/symbol/import/call graph. See [`archify-integration.md`](archify-integration.md)
+for the model, supported languages, attribution, and current boundaries.
+
 The demo trace is built from `examples/python-debug-demo/` using:
 
 - AST-based static hierarchy extraction from `app.py`;
@@ -150,12 +160,17 @@ The current UI supports:
 13. source diff and changed-line evidence;
 14. edit-scope compliance / violation reporting;
 15. a pre-apply Patch Guard API for coding-agent integration.
+16. an Archify-derived repository graph for Python and JavaScript/TypeScript;
+17. Repository map search, hierarchy drill-down, source navigation,
+    upstream/downstream reach, and directed route tracing inside PipeWorld.
 
 ## Not Implemented Yet
 
 - direct adapters for Codex / Claude Code / other live agents;
 - execution of a real coding agent under the generated ScopeContract;
 - path-sensitive / interprocedural data-flow analysis;
+- full tree-sitter or TypeScript-compiler parsing and cross-file symbol typing;
+- architecture graph delta/receipt export and revision-verified source links;
 - Monaco source inspector;
 - persistent sessions / trace database;
 - interaction logging for the user study.

@@ -103,6 +103,54 @@
   background: rgba(248,251,253,.75);
   box-shadow: 0 7px 20px rgba(32,51,66,.07);
 }
+
+.architecture-lens {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--game-border);
+  border-radius: 14px;
+  background: rgba(248,251,253,.76);
+  box-shadow: 0 7px 20px rgba(32,51,66,.06);
+}
+.architecture-lens.active { border-color: rgba(135,92,245,.58); background: rgba(249,247,255,.88); }
+.architecture-lens-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.architecture-lens-heading > div:first-child { min-width: 0; }
+.architecture-lens-heading span { display: block; color: var(--game-purple); font-size: 7px; font-weight: 900; letter-spacing: .12em; }
+.architecture-lens-heading strong { display: block; margin-top: 2px; font-size: 10px; }
+.architecture-lens-heading small { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--game-muted); font-size: 7px; }
+.architecture-mode-switch { flex: 0 0 auto; display: flex; gap: 4px; padding: 3px; border: 1px solid #c8d3db; border-radius: 9px; background: rgba(255,255,255,.76); }
+.architecture-mode-switch button,
+.architecture-actions button { border: 0; border-radius: 6px; padding: 6px 8px; background: transparent; color: #657681; font-size: 8px; font-weight: 800; cursor: pointer; }
+.architecture-mode-switch button.active,
+.architecture-actions button.active { background: #7756db; color: #fff; box-shadow: 0 3px 9px rgba(89,58,174,.2); }
+.architecture-mode-switch button:disabled,
+.architecture-actions button:disabled { cursor: not-allowed; opacity: .4; }
+.architecture-tools { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(150px, .8fr) auto minmax(190px, 1.2fr); gap: 8px; align-items: end; }
+.architecture-search { position: relative; min-width: 0; }
+.architecture-search > span,
+.architecture-selection > span { display: block; margin: 0 0 4px 2px; color: #7766b1; font-size: 6px; font-weight: 900; letter-spacing: .1em; }
+.architecture-search input { width: 100%; height: 31px; border: 1px solid #c4ced8; border-radius: 8px; padding: 0 9px; background: rgba(255,255,255,.9); color: var(--game-ink); font-size: 8px; outline: none; }
+.architecture-search input:focus { border-color: var(--game-purple); box-shadow: 0 0 0 2px rgba(135,92,245,.12); }
+.architecture-search input:disabled { opacity: .5; }
+.architecture-results { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; right: 0; overflow: hidden; border: 1px solid #bbb0df; border-radius: 9px; background: #fff; box-shadow: 0 12px 28px rgba(38,28,71,.18); }
+.architecture-results button { width: 100%; display: block; border: 0; border-bottom: 1px solid #ece8f5; padding: 7px 9px; background: #fff; text-align: left; cursor: pointer; }
+.architecture-results button:hover { background: #f5f1ff; }
+.architecture-results strong,.architecture-results small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.architecture-results strong { font-size: 8px; }
+.architecture-results small { margin-top: 2px; color: var(--game-muted); font-size: 7px; }
+.architecture-results p { margin: 0; padding: 9px; color: var(--game-muted); font-size: 8px; }
+.architecture-selection { min-width: 0; height: 44px; padding: 4px 8px 5px; border-left: 2px solid rgba(135,92,245,.42); }
+.architecture-selection strong,.architecture-selection small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.architecture-selection strong { font-size: 9px; }
+.architecture-selection small { margin-top: 2px; color: var(--game-muted); font-size: 7px; }
+.architecture-actions { align-self: end; height: 31px; display: flex; gap: 3px; padding: 3px; border: 1px solid #c8d3db; border-radius: 8px; background: rgba(255,255,255,.72); }
+.architecture-actions button { padding: 4px 7px; }
+.architecture-error,.architecture-warning { margin: 0; padding-top: 6px; border-top: 1px solid rgba(119,143,161,.22); font-size: 7px; }
+.architecture-error { color: #af3439; }
+.architecture-warning { color: #8b641d; }
 .debug-case-intro { display: flex; flex-direction: column; justify-content: center; padding: 0 4px; }
 .debug-case-intro span { color: var(--game-purple); font-size: 7px; font-weight: 900; letter-spacing: .12em; }
 .debug-case-intro strong { margin-top: 2px; font-size: 10px; }
@@ -364,6 +412,9 @@
   .game-app .pipe-inspector { min-height: auto; border-left: 0; border-top: 1px solid var(--game-border); }
   .game-agent-strip { grid-template-columns: 1fr; }
   .debug-case-picker { grid-template-columns: 1fr; }
+  .architecture-lens-heading { align-items: flex-start; flex-direction: column; }
+  .architecture-tools { grid-template-columns: 1fr; }
+  .architecture-actions { justify-self: start; }
   .debug-case-options { grid-template-columns: 1fr; }
   .reset-case { justify-self: start; }
   .game-world-hud.controls { top: 58px; }
